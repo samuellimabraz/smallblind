@@ -1,0 +1,175 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// USER MODELS
+model User {
+  id           String    @id @default(uuid())
+  username     String    @unique
+  email        String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  lastLogin    DateTime?
+
+  // Relations
+  settings     AppSettings?
+  sessions     Session[]
+  faces        FaceEmbedding[]
+  interactions Interaction[]
+}
+
+model AppSettings {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Speech settings
+  voiceId     String?
+  speechRate  Float?  @default(1.0)
+  speechPitch Float?  @default(1.0)
+
+  // Vision settings
+  detectionThreshold Float?  @default(0.5)
+  detectionMode      String? @default("standard") // standard, detailed, simple
+
+  // General settings
+  language             String? @default("en")
+  theme                String? @default("system")
+  notificationsEnabled Boolean @default(true)
+
+  // Accessibility settings
+  highContrast      Boolean @default(false)
+  largeText         Boolean @default(false)
+  audioDescriptions Boolean @default(true)
+  hapticFeedback    Boolean @default(true)
+}
+
+model Session {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startTime  DateTime  @default(now())
+  endTime    DateTime?
+  deviceInfo Json? // Stored as JSON with device details
+
+  // Relations
+  interactions Interaction[]
+}
+
+model Interaction {
+  id        String   @id @default(uuid())
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String // vision, speech, ocr, qa, etc.
+  input     Json? // Input data as JSON
+  output    Json? // Output data as JSON
+  timestamp DateTime @default(now())
+  duration  Int? // Duration in milliseconds
+}
+
+// FACE RECOGNITION MODELS
+model FaceEmbedding {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  faceId    String   @unique
+  name      String?
+  embedding Float[] // Array of embedding values
+  createdAt DateTime @default(now())
+}
+
+// AI MODEL METADATA
+model ModelMetadata {
+  id        String   @id @default(uuid())
+  name      String
+  version   String
+  type      String // vision, audio, text, face, ocr
+  tasks     String[] // Array of tasks the model can perform
+  format    String // ONNX, TensorFlow, PyTorch, etc.
+  size      Int // Size in bytes
+  path      String // Path to the model file
+  quantized Boolean // Whether the model is quantized
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, version])
+}
+
+// OCR RELATED MODELS
+model OCRResult {
+  id            String   @id @default(uuid())
+  interactionId String?
+  text          String
+  confidence    Float
+  language      String?
+  createdAt     DateTime @default(now())
+
+  // Relations
+  textBlocks TextBlock[]
+}
+
+model TextBlock {
+  id          String    @id @default(uuid())
+  ocrResultId String
+  ocrResult   OCRResult @relation(fields: [ocrResultId], references: [id], onDelete: Cascade)
+  text        String
+  boundingBox Json // x, y, width, height as JSON
+  confidence  Float
+  type        String? // paragraph, word, character, etc.
+}
+
+// RECOGNITION RESULTS
+model RecognitionResult {
+  id            String   @id @default(uuid())
+  interactionId String?
+  type          String // object, face, text, etc.
+  confidence    Float
+  boundingBox   Json // x, y, width, height as JSON
+  metadata      Json? // Additional metadata as JSON
+  createdAt     DateTime @default(now())
+}
+
+// SYSTEM & CONFIGURATION
+model SystemLog {
+  id        String   @id @default(uuid())
+  level     String // info, error, warn, debug
+  message   String
+  metadata  Json? // Additional metadata as JSON
+  timestamp DateTime @default(now())
+}
+
+model RateLimitRule {
+  id       String  @id @default(uuid())
+  path     String // API path the rule applies to
+  limit    Int // Number of requests allowed
+  window   Int // Time window in seconds
+  userType String? // Type of user the rule applies to (free, premium, etc.)
+  active   Boolean @default(true)
+}
+
+// API MANAGEMENT
+model ApiKey {
+  id        String    @id @default(uuid())
+  key       String    @unique
+  name      String
+  userId    String? // Optional link to a User
+  scopes    String[] // Array of permission scopes
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  lastUsed  DateTime?
+}
