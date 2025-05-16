@@ -1,11 +1,13 @@
 services:
   db:
-    image: postgres:15.3
-    volumes:
-      - ./volumes/postgres/data:/var/lib/postgresql/data
+    image: postgres:latest
+    env_file:
+      - .env
     environment:
-      POSTGRES_PASSWORD: thor
-      POSTGRES_USER: thor
-      POSTGRES_DB: thor
+      - POSTGRES_USER=${POSTGRES_USER:-postgre}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgre}
+      - POSTGRES_DB=${POSTGRES_DB:-postgre}
     ports:
       - "5432:5432"
+    volumes:
+      - ./volumes/postgres/data:/var/lib/postgresql/data
