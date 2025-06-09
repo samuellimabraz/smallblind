@@ -2,18 +2,34 @@ import { Request, Response } from 'express';
 import { ObjectDetectionService } from '../services/object-detection.service';
 import { validationResult } from 'express-validator';
 import { ObjectDetectionOptions } from '../interfaces/detection.interface';
+import { VisionStorageService } from '../services/vision-storage.service';
+
+// Extended Request interface to include user and session
+interface AuthenticatedRequest extends Request {
+    user?: {
+        id: string;
+        username?: string;
+        email?: string;
+    };
+    session?: {
+        id: string;
+        [key: string]: any;
+    };
+}
 
 export class ObjectDetectionController {
     private detectionService: ObjectDetectionService;
+    private visionStorageService: VisionStorageService;
 
     constructor() {
         this.detectionService = ObjectDetectionService.getInstance();
+        this.visionStorageService = VisionStorageService.getInstance();
     }
 
     /**
      * Detect objects in an uploaded image
      */
-    public detectObjects = async (req: Request, res: Response): Promise<void> => {
+    public detectObjects = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
         try {
             // Validate request
             const errors = validationResult(req);
@@ -37,12 +53,61 @@ export class ObjectDetectionController {
             };
 
             // Process the image
+            const startTime = Date.now();
             const result = await this.detectionService.detectObjects(req.file.buffer, options);
+            const processingTime = Date.now() - startTime;
 
-            // Return the response
+            // Save the detection results to the database if the user is authenticated
+            let savedResult = null;
+            if (req.user) {
+                try {
+                    // Extract session ID if available
+                    const sessionId = req.session?.id || null;
+
+                    // Format the detections for storage
+                    const formattedDetections = result.detections.map(detection => ({
+                        label: detection.label,
+                        confidence: detection.score,
+                        boundingBox: {
+                            xMin: detection.box.xmin,
+                            yMin: detection.box.ymin,
+                            xMax: detection.box.xmax,
+                            yMax: detection.box.ymax
+                        }
+                    }));
+
+                    // Save the object detection results
+                    savedResult = await this.visionStorageService.saveObjectDetection(
+                        req.user.id,
+                        sessionId,
+                        req.file.buffer,
+                        req.file.originalname || null,
+                        req.file.mimetype?.split('/')[1] || null, // Extract format (jpeg, png, etc.)
+                        result.model,
+                        {
+                            threshold: options.threshold || 0.5,
+                            maxObjects: options.maxObjects,
+                            dtype: options.dtype
+                        },
+                        formattedDetections,
+                        processingTime
+                    );
+
+                    console.log(`Saved object detection results with ID: ${savedResult?.id || 'unknown'}`);
+                } catch (storageError) {
+                    // Log the error but don't fail the request
+                    console.error('Error saving detection results:', storageError);
+                }
+            }
+
+            // Return the detection results
             res.status(200).json({
                 success: true,
-                data: result
+                data: {
+                    ...result,
+                    processingTime,
+                    savedResultId: savedResult?.id || null
+                }
             });
         } catch (error) {
             console.error('Error in object detection:', error);

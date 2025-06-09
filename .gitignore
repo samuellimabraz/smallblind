@@ -6,3 +6,5 @@ volumes
 __pycache__
 .vscode
 models/*
+dist/*
+dist

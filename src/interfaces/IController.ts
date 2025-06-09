@@ -32,6 +32,9 @@ export interface IController {
   /**
    * Validate input data
    * @param data Data to validate
+   * @protected Only for use within controller implementations
    */
-  validateInput(data: any): ValidationResult;
+  // Note: TypeScript interfaces cannot specify method visibility (like protected),
+  // but we can document this method as protected to indicate its intended use
+  validateInput?(data: any): ValidationResult;
 } 

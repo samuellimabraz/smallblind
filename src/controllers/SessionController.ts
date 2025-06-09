@@ -91,6 +91,7 @@ export class SessionController {
             const session = await this.sessionRepository.create({
                 userId,
                 startTime: new Date(),
+                endTime: null,
                 deviceInfo: deviceInfo || {},
             });
 
@@ -195,113 +196,6 @@ export class SessionController {
             });
         } catch (error) {
             console.error('Error deleting session:', error);
-            res.status(500).json({ message: 'Internal server error' });
-        }
-    }
-
-    /**
-     * Add an interaction to a session
-     * @param req Request
-     * @param res Response
-     */
-    async addInteraction(req: AuthRequest, res: Response): Promise<void> {
-        try {
-            const userId = req.user?.id;
-            const sessionId = req.params.id;
-
-            if (!userId) {
-                res.status(401).json({ message: 'Unauthorized' });
-                return;
-            }
-
-            if (!sessionId) {
-                res.status(400).json({ message: 'Session ID is required' });
-                return;
-            }
-
-            const session = await this.sessionRepository.findById(sessionId);
-
-            if (!session) {
-                res.status(404).json({ message: 'Session not found' });
-                return;
-            }
-
-            // Check if the session belongs to the authenticated user
-            if (session.userId !== userId) {
-                res.status(403).json({ message: 'Forbidden' });
-                return;
-            }
-
-            // Check if the session is already ended
-            if (session.endTime) {
-                res.status(400).json({ message: 'Cannot add interaction to ended session' });
-                return;
-            }
-
-            const { type, input, output, duration } = req.body;
-
-            if (!type) {
-                res.status(400).json({ message: 'Interaction type is required' });
-                return;
-            }
-
-            const interaction = await this.sessionRepository.addInteraction(sessionId, {
-                userId,
-                type,
-                input: input || null,
-                output: output || null,
-                timestamp: new Date(),
-                duration: duration || null,
-            });
-
-            res.status(201).json({
-                message: 'Interaction added successfully',
-                interaction,
-            });
-        } catch (error) {
-            console.error('Error adding interaction:', error);
-            res.status(500).json({ message: 'Internal server error' });
-        }
-    }
-
-    /**
-     * Get interactions for a session
-     * @param req Request
-     * @param res Response
-     */
-    async getInteractions(req: AuthRequest, res: Response): Promise<void> {
-        try {
-            const userId = req.user?.id;
-            const sessionId = req.params.id;
-
-            if (!userId) {
-                res.status(401).json({ message: 'Unauthorized' });
-                return;
-            }
-
-            if (!sessionId) {
-                res.status(400).json({ message: 'Session ID is required' });
-                return;
-            }
-
-            const session = await this.sessionRepository.findById(sessionId);
-
-            if (!session) {
-                res.status(404).json({ message: 'Session not found' });
-                return;
-            }
-
-            // Check if the session belongs to the authenticated user
-            if (session.userId !== userId) {
-                res.status(403).json({ message: 'Forbidden' });
-                return;
-            }
-
-            const interactions = await this.sessionRepository.getInteractions(sessionId);
-
-            res.status(200).json({ interactions });
-        } catch (error) {
-            console.error('Error getting interactions:', error);
             res.status(500).json({ message: 'Internal server error' });
         }
     }

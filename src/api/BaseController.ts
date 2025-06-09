@@ -49,7 +49,7 @@ export abstract class BaseController implements IController {
      * Validate input data
      * @param data Data to validate
      */
-    protected validateInput(data: any): ValidationResult {
+    public validateInput(data: any): ValidationResult {
         return {
             valid: true
         };

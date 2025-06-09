@@ -1,9 +1,5 @@
 import PrismaService from '../database/prisma-service';
-import { Session, Interaction, Prisma } from '../generated/prisma';
-
-export interface SessionWithInteractions extends Session {
-    interactions: Interaction[];
-}
+import { Session, Prisma } from '../generated/prisma';
 
 export class SessionRepository {
     private prisma: PrismaService;
@@ -16,12 +12,9 @@ export class SessionRepository {
      * Find a session by ID
      * @param id Session ID
      */
-    async findById(id: string): Promise<SessionWithInteractions | null> {
+    async findById(id: string): Promise<Session | null> {
         return this.prisma.prisma.session.findUnique({
             where: { id },
-            include: {
-                interactions: true,
-            },
         });
     }
 
@@ -29,12 +22,9 @@ export class SessionRepository {
      * Find sessions by user ID
      * @param userId User ID
      */
-    async findByUserId(userId: string): Promise<SessionWithInteractions[]> {
+    async findByUserId(userId: string): Promise<Session[]> {
         return this.prisma.prisma.session.findMany({
             where: { userId },
-            include: {
-                interactions: true,
-            },
             orderBy: {
                 startTime: 'desc',
             },
@@ -48,14 +38,14 @@ export class SessionRepository {
     async create(sessionData: {
         userId: string;
         startTime: Date;
-        endTime: Date | null;
+        endTime?: Date | null;
         deviceInfo: any;
     }): Promise<Session> {
         return this.prisma.prisma.session.create({
             data: {
                 userId: sessionData.userId,
                 startTime: sessionData.startTime,
-                endTime: sessionData.endTime,
+                endTime: sessionData.endTime || null,
                 deviceInfo: sessionData.deviceInfo as Prisma.InputJsonValue,
             },
         });
@@ -116,45 +106,6 @@ export class SessionRepository {
             where: { id },
             data: {
                 endTime: new Date(),
-            },
-        });
-    }
-
-    /**
-     * Add an interaction to a session
-     * @param sessionId Session ID
-     * @param interactionData Interaction data
-     */
-    async addInteraction(sessionId: string, interactionData: {
-        userId: string;
-        type: string;
-        input?: any;
-        output?: any;
-        timestamp?: Date;
-        duration?: number | null;
-    }): Promise<Interaction> {
-        return this.prisma.prisma.interaction.create({
-            data: {
-                sessionId,
-                userId: interactionData.userId,
-                type: interactionData.type,
-                input: interactionData.input as Prisma.InputJsonValue,
-                output: interactionData.output as Prisma.InputJsonValue,
-                timestamp: interactionData.timestamp || new Date(),
-                duration: interactionData.duration || null,
-            },
-        });
-    }
-
-    /**
-     * Get interactions for a session
-     * @param sessionId Session ID
-     */
-    async getInteractions(sessionId: string): Promise<Interaction[]> {
-        return this.prisma.prisma.interaction.findMany({
-            where: { sessionId },
-            orderBy: {
-                timestamp: 'asc',
             },
         });
     }

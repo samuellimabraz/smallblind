@@ -287,7 +287,8 @@ router.delete('/:id', authenticateJWT, (req, res) => sessionController.deleteSes
  *       500:
  *         description: Internal server error
  */
-router.post('/:id/interactions', authenticateJWT, (req, res) => sessionController.addInteraction(req, res));
+// This route has been removed as interactions are no longer supported
+// router.post('/:id/interactions', authenticateJWT, (req, res) => sessionController.addInteraction(req, res));
 
 /**
  * @swagger
@@ -345,6 +346,7 @@ router.post('/:id/interactions', authenticateJWT, (req, res) => sessionControlle
  *       500:
  *         description: Internal server error
  */
-router.get('/:id/interactions', authenticateJWT, (req, res) => sessionController.getInteractions(req, res));
+// This route has been removed as interactions are no longer supported
+// router.get('/:id/interactions', authenticateJWT, (req, res) => sessionController.getInteractions(req, res));
 
 export { router as sessionRouter }; 

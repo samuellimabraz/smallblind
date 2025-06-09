@@ -1,5 +1,5 @@
 import PrismaService from '../database/prisma-service';
-import { User } from '@prisma/client';
+import { User } from '../generated/prisma';
 
 export class UserRepository {
     private prisma;

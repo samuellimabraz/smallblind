@@ -1,12 +1,9 @@
-import { PostgresConnector } from '../database/postgres-connector';
 import PrismaService from '../database/prisma-service';
 
 export class UserProfileService {
-    private dbConnector: PostgresConnector;
     private prisma: PrismaService;
 
     constructor() {
-        this.dbConnector = new PostgresConnector();
         this.prisma = PrismaService.getInstance();
     }
 
@@ -20,7 +17,6 @@ export class UserProfileService {
                 where: { id: userId },
                 include: {
                     settings: true,
-                    faces: true,
                 },
             });
         } catch (error) {
@@ -92,21 +88,6 @@ export class UserProfileService {
     }
 
     /**
-     * Get saved face embeddings for a user
-     * @param userId User ID
-     */
-    async getSavedFaces(userId: string) {
-        try {
-            return await this.prisma.prisma.faceEmbedding.findMany({
-                where: { userId },
-            });
-        } catch (error) {
-            console.error('Error getting saved faces:', error);
-            throw error;
-        }
-    }
-
-    /**
      * Get session history for a user
      * @param userId User ID
      */
@@ -114,15 +95,28 @@ export class UserProfileService {
         try {
             return await this.prisma.prisma.session.findMany({
                 where: { userId },
-                include: {
-                    interactions: true,
-                },
                 orderBy: {
                     startTime: 'desc',
                 },
             });
         } catch (error) {
             console.error('Error getting session history:', error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Delete a user account and all related data
+     * @param userId User ID
+     */
+    async deleteUserAccount(userId: string) {
+        try {
+            // Prisma will cascade delete related records due to onDelete: Cascade
+            await this.prisma.prisma.user.delete({
+                where: { id: userId },
+            });
+        } catch (error) {
+            console.error('Error deleting user account:', error);
             throw error;
         }
     }

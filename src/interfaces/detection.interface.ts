@@ -42,4 +42,29 @@ export interface ModelInfo {
 export interface VisionModelRegistry {
     objectDetection: ModelInfo[];
     imageCaption: ModelInfo[];
+}
+
+/**
+ * Options for image description
+ */
+export interface ImageDescriptionOptions {
+    modelName?: string;
+    prompt?: string;
+    maxNewTokens?: number;
+    doSample?: boolean;
+    dtype?: {
+        embed_tokens: 'fp16' | 'fp32';
+        vision_encoder: 'fp16' | 'fp32' | 'q8';
+        decoder_model_merged: 'q4' | 'q4f16' | 'q8';
+    };
+}
+
+/**
+ * Response for image description
+ */
+export interface ImageDescriptionResponse {
+    description: string;
+    processingTime: number;
+    model: string;
+    prompt: string;
 } 

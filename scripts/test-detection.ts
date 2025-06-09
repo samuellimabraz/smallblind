@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ObjectDetectionService } from '../src/services/object-detection.service';
+import PrismaService from '../src/database/prisma-service';
 
 /**
  * Test script for object detection service
@@ -22,6 +23,100 @@ function parseArgs(): Record<string, string> {
     });
 
     return args;
+}
+
+// Function to save the detection results to the database
+async function saveToDatabase(detectionResult: any, userId?: string) {
+    try {
+        const prisma = PrismaService.getInstance().prisma;
+
+        // Create a default user if userId is not provided
+        if (!userId) {
+            const existingUser = await prisma.user.findFirst({
+                where: { username: 'test_user' }
+            });
+
+            if (!existingUser) {
+                console.log('Creating test user for database records...');
+                const testUser = await prisma.user.create({
+                    data: {
+                        username: 'test_user',
+                        email: 'test@example.com',
+                        passwordHash: '$2b$10$dZcXMQz3STY3N30FJpGaL.7kTH72G2HuhRPF9OAMqMc7lxL6FBPC2' // password: test123
+                    }
+                });
+                userId = testUser.id;
+                console.log(`Created test user with ID: ${userId}`);
+            } else {
+                userId = existingUser.id;
+                console.log(`Using existing test user with ID: ${userId}`);
+            }
+        }
+
+        // Create a session for the test
+        console.log('Creating test session...');
+        const session = await prisma.session.create({
+            data: {
+                userId,
+                deviceInfo: { userAgent: 'Test Detection Script', ip: '127.0.0.1' }
+            }
+        });
+        console.log(`Created session with ID: ${session.id}`);
+
+        // Create a vision analysis record
+        console.log('Creating vision analysis record...');
+        const visionAnalysis = await prisma.visionAnalysis.create({
+            data: {
+                userId,
+                sessionId: session.id,
+                imageHash: 'test-image-hash',
+                imageFormat: 'jpeg',
+                fileName: 'test-image.jpg',
+                analysisType: 'OBJECT_DETECTION'
+            }
+        });
+        console.log(`Created vision analysis with ID: ${visionAnalysis.id}`);
+
+        // Create the object detection record
+        console.log('Creating object detection record...');
+        const objectDetection = await prisma.objectDetection.create({
+            data: {
+                visionAnalysisId: visionAnalysis.id,
+                userId,
+                modelName: detectionResult.model,
+                modelSettings: {
+                    threshold: 0.45,
+                    dtype: detectionResult.dtype
+                },
+                processingTimeMs: detectionResult.processingTime
+            }
+        });
+        console.log(`Created object detection with ID: ${objectDetection.id}`);
+
+        // Create records for each detected object
+        console.log('Creating detected object records...');
+        for (const detection of detectionResult.detections) {
+            await prisma.detectedObject.create({
+                data: {
+                    objectDetectionId: objectDetection.id,
+                    label: detection.label,
+                    confidence: detection.score,
+                    boundingBox: {
+                        xmin: detection.box.xmin,
+                        ymin: detection.box.ymin,
+                        width: detection.box.width,
+                        height: detection.box.height
+                    }
+                }
+            });
+        }
+
+        console.log(`Successfully saved ${detectionResult.detections.length} detected objects to the database`);
+        return true;
+    } catch (error) {
+        console.error('Error saving to database:', error);
+        return false;
+    }
 }
 
 async function runTest(): Promise<void> {
@@ -63,7 +158,7 @@ async function runTest(): Promise<void> {
 
     // Determine which model and dtype to test
     const modelToTest = args.model || models[0];
-    const dtypeToTest = args.dtype || 'q4';
+    const dtypeToTest = args.dtype || 'fp16';
     console.log(`\n🚀 Testing with model: ${modelToTest}`);
     console.log(`🔧 Using quantization: ${dtypeToTest}`);
 
@@ -91,6 +186,16 @@ async function runTest(): Promise<void> {
                 console.log(`   ${i + 1}. ${detection.label} (confidence: ${(detection.score * 100).toFixed(2)}%)`);
                 console.log(`      Box: x=${detection.box.xmin}, y=${detection.box.ymin}, width=${detection.box.width}, height=${detection.box.height}`);
             });
+
+            // Save the results to the database
+            console.log('\n💾 Saving results to database...');
+            const saveResult = await saveToDatabase(result);
+
+            if (saveResult) {
+                console.log('✅ Successfully saved detection results to database!');
+            } else {
+                console.log('❌ Failed to save detection results to database.');
+            }
         } else {
             console.log('No objects detected in the image.');
         }

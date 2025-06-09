@@ -23,11 +23,11 @@ model User {
   createdAt    DateTime  @default(now())
   lastLogin    DateTime?
 
-  // Relations
-  settings     AppSettings?
-  sessions     Session[]
-  faces        FaceEmbedding[]
-  interactions Interaction[]
+  settings          AppSettings?
+  sessions          Session[]
+  visionAnalyses    VisionAnalysis[]
+  objectDetections  ObjectDetection[]
+  imageDescriptions ImageDescription[]
 }
 
 model AppSettings {
@@ -35,25 +35,15 @@ model AppSettings {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Speech settings
-  voiceId     String?
-  speechRate  Float?  @default(1.0)
-  speechPitch Float?  @default(1.0)
-
   // Vision settings
   detectionThreshold Float?  @default(0.5)
-  detectionMode      String? @default("standard") // standard, detailed, simple
+  detectionModel     String? @default("Xenova/yolos-tiny")
+  detectionDtype     String? @default("fp16")
 
   // General settings
   language             String? @default("en")
   theme                String? @default("system")
   notificationsEnabled Boolean @default(true)
-
-  // Accessibility settings
-  highContrast      Boolean @default(false)
-  largeText         Boolean @default(false)
-  audioDescriptions Boolean @default(true)
-  hapticFeedback    Boolean @default(true)
 }
 
 model Session {
@@ -62,104 +52,87 @@ model Session {
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   startTime  DateTime  @default(now())
   endTime    DateTime?
-  deviceInfo Json? // Stored as JSON with device details
+  deviceInfo Json?
 
-  // Relations
-  interactions Interaction[]
+  visionAnalyses VisionAnalysis[]
 }
 
-model Interaction {
-  id        String   @id @default(uuid())
-  sessionId String
-  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String // vision, speech, ocr, qa, etc.
-  input     Json? // Input data as JSON
-  output    Json? // Output data as JSON
-  timestamp DateTime @default(now())
-  duration  Int? // Duration in milliseconds
-}
-
-// FACE RECOGNITION MODELS
-model FaceEmbedding {
+// VISION ANALYSIS MODELS
+model VisionAnalysis {
   id        String   @id @default(uuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  faceId    String   @unique
-  name      String?
-  embedding Float[] // Array of embedding values
-  createdAt DateTime @default(now())
+  sessionId String?
+  session   Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime @default(now())
+  imageHash   String? // Optional hash of the image content for deduplication
+  imageFormat String? // e.g., "jpeg", "png"
+  fileName    String?
+  imagePath   String?
+
+  // Type discriminator for polymorphic queries
+  analysisType String // "OBJECT_DETECTION" or "IMAGE_DESCRIPTION"
+
+  objectDetection  ObjectDetection?
+  imageDescription ImageDescription?
 }
 
-// AI MODEL METADATA
-model ModelMetadata {
-  id        String   @id @default(uuid())
-  name      String
-  version   String
-  type      String // vision, audio, text, face, ocr
-  tasks     String[] // Array of tasks the model can perform
-  format    String // ONNX, TensorFlow, PyTorch, etc.
-  size      Int // Size in bytes
-  path      String // Path to the model file
-  quantized Boolean // Whether the model is quantized
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// Object detection results
+model ObjectDetection {
+  id               String         @id @default(uuid())
+  visionAnalysisId String         @unique
+  visionAnalysis   VisionAnalysis @relation(fields: [visionAnalysisId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([name, version])
+  modelName     String
+  modelSettings Json?
+
+  detectedObjects  DetectedObject[]
+  processingTimeMs Int?
 }
 
-// OCR RELATED MODELS
-model OCRResult {
-  id            String   @id @default(uuid())
-  interactionId String?
-  text          String
-  confidence    Float
-  language      String?
-  createdAt     DateTime @default(now())
+// Individual objects detected in an image
+model DetectedObject {
+  id                String          @id @default(uuid())
+  objectDetectionId String
+  objectDetection   ObjectDetection @relation(fields: [objectDetectionId], references: [id], onDelete: Cascade)
 
-  // Relations
-  textBlocks TextBlock[]
-}
-
-model TextBlock {
-  id          String    @id @default(uuid())
-  ocrResultId String
-  ocrResult   OCRResult @relation(fields: [ocrResultId], references: [id], onDelete: Cascade)
-  text        String
-  boundingBox Json // x, y, width, height as JSON
+  label       String
   confidence  Float
-  type        String? // paragraph, word, character, etc.
+  boundingBox Json // xMin, yMin, xMax, yMax
+
+  attributes Json?
 }
 
-// RECOGNITION RESULTS
-model RecognitionResult {
-  id            String   @id @default(uuid())
-  interactionId String?
-  type          String // object, face, text, etc.
-  confidence    Float
-  boundingBox   Json // x, y, width, height as JSON
-  metadata      Json? // Additional metadata as JSON
-  createdAt     DateTime @default(now())
+// Image description results
+model ImageDescription {
+  id               String         @id @default(uuid())
+  visionAnalysisId String         @unique
+  visionAnalysis   VisionAnalysis @relation(fields: [visionAnalysisId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  modelName    String
+  prompt       String
+  maxNewTokens Int?
+  temperature  Float?
+
+  description      String
+  processingTimeMs Int?
 }
 
 // SYSTEM & CONFIGURATION
 model SystemLog {
   id        String   @id @default(uuid())
-  level     String // info, error, warn, debug
+  level     String
   message   String
-  metadata  Json? // Additional metadata as JSON
+  metadata  Json?
   timestamp DateTime @default(now())
-}
 
-model RateLimitRule {
-  id       String  @id @default(uuid())
-  path     String // API path the rule applies to
-  limit    Int // Number of requests allowed
-  window   Int // Time window in seconds
-  userType String? // Type of user the rule applies to (free, premium, etc.)
-  active   Boolean @default(true)
+  userId    String?
+  sessionId String?
 }
 
 // API MANAGEMENT
@@ -167,8 +140,8 @@ model ApiKey {
   id        String    @id @default(uuid())
   key       String    @unique
   name      String
-  userId    String? // Optional link to a User
-  scopes    String[] // Array of permission scopes
+  userId    String?
+  scopes    String[]
   expiresAt DateTime?
   createdAt DateTime  @default(now())
   lastUsed  DateTime?
