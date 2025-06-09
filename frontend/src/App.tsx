@@ -16,7 +16,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
   
   if (!user) {
-    return <Navigate to="/login" replace />
+    return <Navigate to="/login\" replace />
   }
   
   return <>{children}</>
@@ -33,7 +33,7 @@ function AppRoutes() {
     <Routes>
       <Route 
         path="/login" 
-        element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />} 
+        element={user ? <Navigate to="/dashboard\" replace /> : <LoginPage />} 
       />
       <Route 
         path="/dashboard" 
@@ -67,7 +67,7 @@ function AppRoutes() {
           </ProtectedRoute>
         } 
       />
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/" element={<Navigate to="/dashboard\" replace />} />
     </Routes>
   )
 }
