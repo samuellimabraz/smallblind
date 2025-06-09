@@ -1,2 +1,10 @@
-node_modules/
+generated
+node_modules/*
+node_modules
+volumes
 .env
+__pycache__
+.vscode
+models/*
+dist/*
+dist

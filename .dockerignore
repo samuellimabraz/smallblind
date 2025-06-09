@@ -1,0 +1,17 @@
+node_modules
+.git
+.env
+.env.example
+.env.local
+.env.development.local
+.env.test.local
+__pycache__
+__tests__
+__mocks__
+__snapshots__
+.next
+.turbo
+.vscode
+.DS_Store
+client-demo
+scripts

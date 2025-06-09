@@ -1,0 +1,148 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// USER MODELS
+model User {
+  id           String    @id @default(uuid())
+  username     String    @unique
+  email        String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  lastLogin    DateTime?
+
+  settings          AppSettings?
+  sessions          Session[]
+  visionAnalyses    VisionAnalysis[]
+  objectDetections  ObjectDetection[]
+  imageDescriptions ImageDescription[]
+}
+
+model AppSettings {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Vision settings
+  detectionThreshold Float?  @default(0.5)
+  detectionModel     String? @default("Xenova/yolos-tiny")
+  detectionDtype     String? @default("fp16")
+
+  // General settings
+  language             String? @default("en")
+  theme                String? @default("system")
+  notificationsEnabled Boolean @default(true)
+}
+
+model Session {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startTime  DateTime  @default(now())
+  endTime    DateTime?
+  deviceInfo Json?
+
+  visionAnalyses VisionAnalysis[]
+}
+
+// VISION ANALYSIS MODELS
+model VisionAnalysis {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId String?
+  session   Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime @default(now())
+  imageHash   String? // Optional hash of the image content for deduplication
+  imageFormat String? // e.g., "jpeg", "png"
+  fileName    String?
+  imagePath   String?
+
+  // Type discriminator for polymorphic queries
+  analysisType String // "OBJECT_DETECTION" or "IMAGE_DESCRIPTION"
+
+  objectDetection  ObjectDetection?
+  imageDescription ImageDescription?
+}
+
+// Object detection results
+model ObjectDetection {
+  id               String         @id @default(uuid())
+  visionAnalysisId String         @unique
+  visionAnalysis   VisionAnalysis @relation(fields: [visionAnalysisId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  modelName     String
+  modelSettings Json?
+
+  detectedObjects  DetectedObject[]
+  processingTimeMs Int?
+}
+
+// Individual objects detected in an image
+model DetectedObject {
+  id                String          @id @default(uuid())
+  objectDetectionId String
+  objectDetection   ObjectDetection @relation(fields: [objectDetectionId], references: [id], onDelete: Cascade)
+
+  label       String
+  confidence  Float
+  boundingBox Json // xMin, yMin, xMax, yMax
+
+  attributes Json?
+}
+
+// Image description results
+model ImageDescription {
+  id               String         @id @default(uuid())
+  visionAnalysisId String         @unique
+  visionAnalysis   VisionAnalysis @relation(fields: [visionAnalysisId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  modelName    String
+  prompt       String
+  maxNewTokens Int?
+  temperature  Float?
+
+  description      String
+  processingTimeMs Int?
+}
+
+// SYSTEM & CONFIGURATION
+model SystemLog {
+  id        String   @id @default(uuid())
+  level     String
+  message   String
+  metadata  Json?
+  timestamp DateTime @default(now())
+
+  userId    String?
+  sessionId String?
+}
+
+// API MANAGEMENT
+model ApiKey {
+  id        String    @id @default(uuid())
+  key       String    @unique
+  name      String
+  userId    String?
+  scopes    String[]
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  lastUsed  DateTime?
+}
