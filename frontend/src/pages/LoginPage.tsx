@@ -87,7 +87,7 @@ export default function LoginPage() {
           <form className="space-y-6" onSubmit={handleSubmit}>
             {!isLogin && (
               <div>
-                <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="username\" className="block text-sm font-medium text-gray-700 mb-2">
                   Username
                 </label>
                 <input
