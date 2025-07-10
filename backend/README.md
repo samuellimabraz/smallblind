@@ -273,6 +273,67 @@ LLAMA_SERVER_URL=http://llama-server:8080
 LLAMA_DEFAULT_MODEL=internvl3-1b
 ```
 
+## Facial Recognition Configuration
+
+The application integrates with an external facial recognition API. To configure it properly, you need to set the following environment variables in your `.env` file:
+
+```bash
+# Facial Recognition API URL
+FACIAL_RECOGNITION_API_URL=https://faceapi-113664566132.europe-west1.run.app
+
+# Facial Recognition Configuration
+FACE_RECOGNITION_ORG_NAME=smallblind
+FACE_RECOGNITION_API_KEY=your-actual-api-key-here
+FACE_RECOGNITION_API_KEY_NAME=smallblind-api-key
+FACE_RECOGNITION_USER=system
+```
+
+### Configuration Details
+
+- **FACIAL_RECOGNITION_API_URL**: The base URL of the external facial recognition API
+- **FACE_RECOGNITION_ORG_NAME**: Your organization name (used to create/identify your org on the API)
+- **FACE_RECOGNITION_API_KEY**: The actual API key for authentication (this should be the unhashed key)
+- **FACE_RECOGNITION_API_KEY_NAME**: The name/identifier for your API key
+- **FACE_RECOGNITION_USER**: The user identifier for API requests
+
+### How It Works
+
+1. **Initialization**: On startup, the application will:
+   - Create the organization if it doesn't exist
+   - Create the API key if it doesn't exist
+   - If they already exist, it will continue normally
+
+2. **Authentication**: For protected routes (register, recognize), the application uses:
+   - **Authorization header**: `Bearer ${FACE_RECOGNITION_API_KEY}`
+   - **api_auth payload**: Contains the user and api_key_name for verification
+
+3. **Person Registration**: Users can register people through the webcam interface, which:
+   - Captures multiple photos automatically
+   - Converts them to base64 format
+   - Sends them to the external API for training
+
+4. **Face Recognition**: During camera analysis, the system can:
+   - Detect faces in images
+   - Identify registered people
+   - Return confidence scores and bounding boxes
+
+### Getting Your API Key
+
+To get your actual API key:
+
+1. The application will attempt to create an organization and API key automatically
+2. Check the server logs for the API key creation response
+3. If successful, the API should return the actual key you need to use
+4. Update the `FACE_RECOGNITION_API_KEY` environment variable with this key
+5. Restart the application
+
+### Troubleshooting
+
+- **"API key not configured"**: Make sure `FACE_RECOGNITION_API_KEY` is set in your `.env` file
+- **Authentication errors**: Verify that the API key is the actual unhashed key, not the hashed version
+- **Organization not found**: The application will create it automatically on first run
+- **API key already exists**: This is normal - the application will continue with the existing key
+
 ## API Documentation
 
 API documentation is available at:

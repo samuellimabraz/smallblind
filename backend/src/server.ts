@@ -10,8 +10,10 @@ import { userRouter } from './routes/userRoutes';
 import { sessionRouter } from './routes/sessionRoutes';
 import { visionRouter } from './routes/visionRoutes';
 import { llamaRouter } from './routes/llamaRoutes';
+import { facialRecognitionRouter } from './routes/facialRecognitionRoutes';
 import PrismaService from './database/prisma-service';
 import { ObjectDetectionService } from './services/object-detection.service';
+import { facialRecognitionService } from './services/facial-recognition.service';
 
 // Load environment variables
 dotenv.config();
@@ -81,6 +83,7 @@ app.use('/api/users', userRouter);
 app.use('/api/sessions', sessionRouter);
 app.use('/api/vision', visionRouter);
 app.use('/api/llama', llamaRouter);
+app.use('/api/facial-recognition', facialRecognitionRouter);
 
 // Health check route
 app.get('/health', (req, res) => {
@@ -101,6 +104,13 @@ const startServer = async () => {
         objectDetectionService.preloadDefaultModel().catch(error => {
             console.error('Error preloading detection model:', error);
         });
+
+        try {
+            await facialRecognitionService.initializeOrganization();
+            console.log('Facial recognition service initialized');
+        } catch (error) {
+            console.error('Error initializing facial recognition service:', error);
+        }
 
         // Start server
         app.listen(PORT, () => {

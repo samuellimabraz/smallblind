@@ -1,9 +1,6 @@
-import React, { useRef, useEffect, useState, useCallback } from "react";
-import { Camera, CameraOff, Loader2, Volume2, VolumeX } from "lucide-react";
+import React, { useRef, useCallback, useState, useEffect } from "react";
+import { Camera, Square, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { speechService } from "@/services/speechService";
 
 interface CameraCaptureProps {
   onCapture: (imageFile: File) => void;
@@ -20,7 +17,6 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isStreamActive, setIsStreamActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isListening, setIsListening] = useState(false);
 
   const startCamera = useCallback(async () => {
     try {
@@ -36,14 +32,10 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         setIsStreamActive(true);
-        speechService.speakInstruction(
-          "Camera started. You can now take a photo or give voice commands.",
-        );
       }
     } catch (err) {
       const errorMessage = "Unable to access camera. Please check permissions.";
       setError(errorMessage);
-      speechService.speakError(errorMessage);
     }
   }, []);
 
@@ -53,7 +45,6 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
       stream.getTracks().forEach((track) => track.stop());
       videoRef.current.srcObject = null;
       setIsStreamActive(false);
-      speechService.speakInstruction("Camera stopped.");
     }
   }, []);
 
@@ -62,76 +53,49 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const context = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d");
 
-    if (!context) return;
+    if (!ctx) return;
 
     // Set canvas dimensions to match video
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
-    // Draw the video frame to canvas
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    console.log('CameraCapture: Capturing photo', {
+      videoWidth: video.videoWidth,
+      videoHeight: video.videoHeight,
+      canvasWidth: canvas.width,
+      canvasHeight: canvas.height
+    });
+
+    // Draw current video frame to canvas
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     // Convert canvas to blob and create file
-    canvas.toBlob(
-      (blob) => {
-        if (blob) {
-          const timestamp = new Date().getTime();
-          const file = new File([blob], `capture_${timestamp}.jpg`, {
-            type: "image/jpeg",
-          });
-          onCapture(file);
-          speechService.speakInstruction("Photo captured. Processing image...");
-        }
-      },
-      "image/jpeg",
-      0.9,
-    );
-  }, [onCapture, isStreamActive]);
-
-  const toggleVoiceListening = useCallback(async () => {
-    if (isListening) {
-      setIsListening(false);
-      speechService.stop();
-      return;
-    }
-
-    try {
-      setIsListening(true);
-      speechService.speakInstruction("Listening for voice commands...");
-
-      const command = await speechService.startListening();
-      const result = speechService.processVoiceCommand(command);
-
-      if (result) {
-        switch (result.action) {
-          case "camera":
-            if (result.parameters?.action === "capture") {
-              capturePhoto();
-            }
-            break;
-          case "help":
-            speechService.speakInstruction(
-              'Available commands: "take photo" to capture, "describe" for scene description, "read text" for OCR, "find objects" for detection.',
-            );
-            break;
-          default:
-            speechService.speakInstruction(
-              "Command not recognized in camera mode.",
-            );
-        }
+    canvas.toBlob((blob) => {
+      if (blob) {
+        console.log('CameraCapture: Blob created', {
+          blobSize: blob.size,
+          blobType: blob.type
+        });
+        
+        const file = new File([blob], `photo-${Date.now()}.jpg`, {
+          type: "image/jpeg",
+        });
+        
+        console.log('CameraCapture: File created', {
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type,
+          lastModified: file.lastModified
+        });
+        
+        onCapture(file);
       } else {
-        speechService.speakInstruction(
-          'Command not recognized. Say "help" for available commands.',
-        );
+        console.error('CameraCapture: Failed to create blob from canvas');
       }
-    } catch (error) {
-      speechService.speakError("Voice recognition failed. Please try again.");
-    } finally {
-      setIsListening(false);
-    }
-  }, [isListening, capturePhoto]);
+    }, "image/jpeg", 0.9);
+  }, [onCapture, isStreamActive]);
 
   useEffect(() => {
     startCamera();
@@ -147,132 +111,79 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
         event.preventDefault();
         capturePhoto();
       }
-      if (event.code === "KeyV") {
-        event.preventDefault();
-        toggleVoiceListening();
-      }
     };
 
     window.addEventListener("keydown", handleKeyPress);
     return () => window.removeEventListener("keydown", handleKeyPress);
-  }, [capturePhoto, toggleVoiceListening, isProcessing]);
+  }, [capturePhoto, isProcessing]);
 
   return (
-    <Card className={`${className} overflow-hidden`}>
-      <CardContent className="p-0">
-        <div className="relative">
-          {/* Video stream */}
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-auto max-h-96 bg-black"
-            style={{ display: isStreamActive ? "block" : "none" }}
-          />
+    <div className={`relative ${className}`}>
+      <div className="relative bg-black rounded-lg overflow-hidden">
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className="w-full h-auto max-h-96 object-cover"
+        />
+        <canvas ref={canvasRef} className="hidden" />
 
-          {/* Hidden canvas for capture */}
-          <canvas ref={canvasRef} className="hidden" />
-
-          {/* Error state */}
-          {error && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-900 text-white p-4">
-              <div className="text-center">
-                <CameraOff className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                <p className="text-lg font-medium mb-2">Camera Not Available</p>
-                <p className="text-sm text-gray-300 mb-4">{error}</p>
-                <Button
-                  onClick={startCamera}
-                  variant="outline"
-                  className="text-white border-white"
-                >
-                  Try Again
-                </Button>
-              </div>
+        {error && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-75">
+            <div className="text-white text-center p-4">
+              <p className="mb-4">{error}</p>
+              <Button onClick={startCamera} variant="outline">
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Retry
+              </Button>
             </div>
-          )}
-
-          {/* Loading state */}
-          {!isStreamActive && !error && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-900 text-white">
-              <div className="text-center">
-                <Loader2 className="h-12 w-12 mx-auto mb-4 animate-spin" />
-                <p className="text-lg font-medium">Starting Camera...</p>
-              </div>
-            </div>
-          )}
-
-          {/* Status badges */}
-          <div className="absolute top-4 left-4 space-y-2">
-            {isStreamActive && (
-              <Badge variant="secondary" className="bg-green-500 text-white">
-                <Camera className="h-3 w-3 mr-1" />
-                Live
-              </Badge>
-            )}
-            {isListening && (
-              <Badge
-                variant="secondary"
-                className="bg-blue-500 text-white animate-pulse"
-              >
-                <Volume2 className="h-3 w-3 mr-1" />
-                Listening
-              </Badge>
-            )}
           </div>
+        )}
 
-          {/* Control buttons overlay */}
-          {isStreamActive && (
-            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
-              <div className="flex space-x-4">
-                <Button
-                  onClick={capturePhoto}
-                  disabled={isProcessing}
-                  size="lg"
-                  className="h-16 w-16 rounded-full bg-white border-4 border-gray-300 hover:border-gray-400 text-gray-900 hover:text-gray-900"
-                  aria-label="Capture photo (Spacebar)"
-                >
-                  {isProcessing ? (
-                    <Loader2 className="h-8 w-8 animate-spin" />
-                  ) : (
-                    <Camera className="h-8 w-8" />
-                  )}
-                </Button>
-
-                <Button
-                  onClick={toggleVoiceListening}
-                  disabled={isProcessing}
-                  size="lg"
-                  variant={isListening ? "default" : "outline"}
-                  className="h-16 w-16 rounded-full"
-                  aria-label="Voice commands (V key)"
-                >
-                  {isListening ? (
-                    <VolumeX className="h-6 w-6" />
-                  ) : (
-                    <Volume2 className="h-6 w-6" />
-                  )}
-                </Button>
-              </div>
+        {!isStreamActive && !error && (
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+            <div className="text-white text-center">
+              <Camera className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Starting camera...</p>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+      </div>
 
-        {/* Instructions */}
-        <div className="p-4 bg-gray-50 text-center">
-          <p className="text-sm text-gray-600 mb-2">
-            Press{" "}
-            <kbd className="px-2 py-1 text-xs bg-gray-200 rounded">Space</kbd>{" "}
-            to capture photo or{" "}
-            <kbd className="px-2 py-1 text-xs bg-gray-200 rounded">V</kbd> for
-            voice commands
-          </p>
-          <p className="text-xs text-gray-500">
-            Voice commands: "take photo", "describe", "read text", "find
-            objects"
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+      <div className="flex justify-center mt-4 space-x-4">
+        <Button
+          onClick={capturePhoto}
+          disabled={!isStreamActive || isProcessing}
+          size="lg"
+          className="flex items-center space-x-2"
+        >
+          <Camera className="h-5 w-5" />
+          <span>{isProcessing ? "Processing..." : "Capture Photo"}</span>
+        </Button>
+
+        <Button
+          onClick={isStreamActive ? stopCamera : startCamera}
+          variant="outline"
+          size="lg"
+        >
+          {isStreamActive ? (
+            <>
+              <Square className="h-4 w-4 mr-2" />
+              Stop
+            </>
+          ) : (
+            <>
+              <Camera className="h-4 w-4 mr-2" />
+              Start
+            </>
+          )}
+        </Button>
+      </div>
+
+      <div className="mt-2 text-center text-sm text-gray-600">
+        <p>Press Space to capture photo</p>
+      </div>
+    </div>
   );
 };

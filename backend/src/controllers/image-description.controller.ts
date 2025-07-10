@@ -1,19 +1,23 @@
 import { Request, Response } from 'express';
 import { validationResult } from 'express-validator';
 import { ImageDescriptionService } from '../services/image-description.service';
+import { VisionStorageService } from '../services/vision-storage.service';
 import { ImageDescriptionOptions } from '../interfaces/detection.interface';
+import { AuthRequest } from '../middlewares/auth.middleware';
 
 export class ImageDescriptionController {
     private descriptionService: ImageDescriptionService;
+    private visionStorageService: VisionStorageService;
 
     constructor() {
         this.descriptionService = ImageDescriptionService.getInstance();
+        this.visionStorageService = VisionStorageService.getInstance();
     }
 
     /**
      * Describe an image using multimodal models
      */
-    public describeImage = async (req: Request, res: Response): Promise<void> => {
+    public describeImage = async (req: AuthRequest, res: Response): Promise<void> => {
         try {
             // Validate request
             const errors = validationResult(req);
@@ -36,14 +40,43 @@ export class ImageDescriptionController {
                 doSample: req.query.doSample === 'true'
             };
 
-
             // Process the image
             const result = await this.descriptionService.describeImage(req.file.buffer, options);
+
+            // Save to database if user is authenticated
+            let savedResult = null;
+            if (req.user) {
+                try {
+                    // Determine image format
+                    const imageFormat = req.file.mimetype || 'image/jpeg';
+
+                    // Get session ID from request headers or generate one
+                    const sessionId = req.headers['x-session-id'] as string || null;
+
+                    savedResult = await this.visionStorageService.saveImageDescription(
+                        req.user.id,
+                        sessionId,
+                        req.file.buffer,
+                        req.file.originalname,
+                        imageFormat,
+                        result.model,
+                        result.prompt,
+                        options.maxNewTokens || null,
+                        options.doSample ? 0.7 : 0.1, // Temperature based on doSample
+                        result.description,
+                        result.processingTime
+                    );
+                } catch (saveError) {
+                    console.error('Error saving image description to database:', saveError);
+                    // Continue without failing the request
+                }
+            }
 
             // Return the response
             res.status(200).json({
                 success: true,
-                data: result
+                data: result,
+                ...(savedResult && { savedAnalysis: { id: savedResult.id } })
             });
         } catch (error) {
             console.error('Error in image description:', error);

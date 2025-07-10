@@ -12,10 +12,16 @@ export const env = {
   // Hugging Face API Token
   HUGGING_FACE_TOKEN: import.meta.env.VITE_HUGGING_FACE_TOKEN,
 
+  // Backend API URL
+  BACKEND_API_URL:
+    import.meta.env.VITE_BACKEND_API_URL ||
+    "http://localhost:3000/api",
+
   // Check if required environment variables are available
   isConfigured: {
     facialRecognition: !!import.meta.env.VITE_FACIAL_RECOGNITION_API_URL,
     huggingFace: !!import.meta.env.VITE_HUGGING_FACE_TOKEN,
+    backend: !!import.meta.env.VITE_BACKEND_API_URL,
   },
 
   // Get environment configuration status
@@ -23,6 +29,7 @@ export const env = {
     facialRecognitionConfigured: !!import.meta.env
       .VITE_FACIAL_RECOGNITION_API_URL,
     huggingFaceConfigured: !!import.meta.env.VITE_HUGGING_FACE_TOKEN,
+    backendConfigured: !!import.meta.env.VITE_BACKEND_API_URL,
     isDevelopment: import.meta.env.DEV,
     isProduction: import.meta.env.PROD,
   }),

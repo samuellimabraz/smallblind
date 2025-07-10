@@ -26,6 +26,10 @@ export interface VisionAnalysisResult {
   text?: string;
   faces?: RecognizedFace[];
   timestamp: Date;
+  processingTime?: number;
+  model?: string;
+  imageFile?: File;
+  imageDataUrl?: string; // Add this property
 }
 
 export interface DetectedObject {
@@ -54,15 +58,6 @@ export interface RecognizedFace {
 export interface CameraSettings {
   resolution: "low" | "medium" | "high";
   autoCapture: boolean;
-  voiceAnnouncements: boolean;
-}
-
-export interface AccessibilitySettings {
-  highContrast: boolean;
-  textToSpeech: boolean;
-  voiceCommands: boolean;
-  fontSize: "normal" | "large" | "extra-large";
-  speechRate: number;
 }
 
 export type NavigationPage =
@@ -70,5 +65,4 @@ export type NavigationPage =
   | "login"
   | "menu"
   | "camera"
-  | "persons"
-  | "settings";
+  | "persons";

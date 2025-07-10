@@ -1,15 +1,19 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  ArrowLeft,
   Users,
-  UserPlus,
+  Plus,
+  Search,
   Edit,
   Trash2,
-  Camera,
-  ArrowLeft,
-  Search,
+  Upload,
   AlertCircle,
   CheckCircle,
+  Camera,
+  Play,
+  Square,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,15 +29,17 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { AccessibilityControls } from "@/components/AccessibilityControls";
+import { Slider } from "@/components/ui/slider";
 import { FacialRecognition } from "@/components/FacialRecognition";
-import { Person, AccessibilitySettings } from "@/types";
+import { Person } from "@/types";
 import { facialRecognitionAPI } from "@/services/facialRecognitionAPI";
-import { speechService } from "@/services/speechService";
 
 const PersonManagement = () => {
   const navigate = useNavigate();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const [persons, setPersons] = useState<Person[]>([]);
   const [filteredPersons, setFilteredPersons] = useState<Person[]>([]);
@@ -42,22 +48,19 @@ const PersonManagement = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // Webcam state
+  const [isWebcamActive, setIsWebcamActive] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [capturedPhotos, setCapturedPhotos] = useState<string[]>([]);
+  const [captureInterval, setCaptureInterval] = useState(2); // seconds
+  const [countdown, setCountdown] = useState(0);
+
   // Form state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPerson, setEditingPerson] = useState<Person | null>(null);
   const [formData, setFormData] = useState({
     name: "",
-    photos: [] as File[],
   });
-
-  const [accessibilitySettings, setAccessibilitySettings] =
-    useState<AccessibilitySettings>({
-      highContrast: false,
-      textToSpeech: true,
-      voiceCommands: true,
-      fontSize: "normal",
-      speechRate: 1.0,
-    });
 
   // Load persons from API
   const loadPersons = async () => {
@@ -67,14 +70,10 @@ const PersonManagement = () => {
       const data = await facialRecognitionAPI.getPersons();
       setPersons(data);
       setFilteredPersons(data);
-      speechService.speakInstruction(
-        `Loaded ${data.length} registered people.`,
-      );
     } catch (err) {
       const errorMessage =
-        "Failed to load people. Please check your connection.";
+        "Unable to load registered people. The external API doesn't support listing registered persons.";
       setError(errorMessage);
-      speechService.speakError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -92,24 +91,129 @@ const PersonManagement = () => {
     }
   }, [searchTerm, persons]);
 
-  // Reset form
-  const resetForm = () => {
-    setFormData({ name: "", photos: [] });
-    setEditingPerson(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+  // Start webcam
+  const startWebcam = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 640, height: 480 },
+        audio: false,
+      });
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        streamRef.current = stream;
+        setIsWebcamActive(true);
+        setError(null);
+      }
+    } catch (err) {
+      setError("Failed to access webcam. Please ensure you have granted camera permissions.");
     }
   };
 
-  // Handle photo selection
-  const handlePhotoSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    if (files.length > 0) {
-      setFormData((prev) => ({ ...prev, photos: files }));
-      speechService.speakInstruction(
-        `Selected ${files.length} photo${files.length > 1 ? "s" : ""}.`,
-      );
+  // Stop webcam
+  const stopWebcam = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
     }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setIsWebcamActive(false);
+    setIsCapturing(false);
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    setCountdown(0);
+  };
+
+  // Capture photo from webcam
+  const capturePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const video = videoRef.current;
+      const context = canvas.getContext('2d');
+
+      if (context) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        context.drawImage(video, 0, 0);
+
+        const photoDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        setCapturedPhotos(prev => [...prev, photoDataUrl]);
+      }
+    }
+  };
+
+  // Start periodic photo capture
+  const startCapturing = () => {
+    if (!isWebcamActive) return;
+
+    setIsCapturing(true);
+    setCapturedPhotos([]);
+
+    // Initial capture after 1 second
+    setTimeout(() => {
+      capturePhoto();
+    }, 1000);
+
+    // Set up interval for periodic capture
+    intervalRef.current = setInterval(() => {
+      capturePhoto();
+    }, captureInterval * 1000);
+
+    // Countdown for visual feedback
+    let countdownValue = captureInterval;
+    const countdownInterval = setInterval(() => {
+      setCountdown(countdownValue);
+      countdownValue--;
+      if (countdownValue < 0) {
+        countdownValue = captureInterval;
+      }
+    }, 1000);
+
+    // Store countdown interval reference
+    setTimeout(() => {
+      if (intervalRef.current) {
+        (intervalRef.current as any).countdownInterval = countdownInterval;
+      }
+    }, 100);
+  };
+
+  // Stop periodic photo capture
+  const stopCapturing = () => {
+    setIsCapturing(false);
+    setCountdown(0);
+
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      if ((intervalRef.current as any).countdownInterval) {
+        clearInterval((intervalRef.current as any).countdownInterval);
+      }
+      intervalRef.current = null;
+    }
+  };
+
+  // Convert data URL to File
+  const dataURLtoFile = (dataurl: string, filename: string): File => {
+    const arr = dataurl.split(',');
+    const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new File([u8arr], filename, { type: mime });
+  };
+
+  // Reset form
+  const resetForm = () => {
+    setFormData({ name: "" });
+    setEditingPerson(null);
+    setCapturedPhotos([]);
+    stopWebcam();
   };
 
   // Create new person
@@ -117,14 +221,12 @@ const PersonManagement = () => {
     if (!formData.name.trim()) {
       const errorMessage = "Please enter a name.";
       setError(errorMessage);
-      speechService.speakError(errorMessage);
       return;
     }
 
-    if (formData.photos.length === 0) {
-      const errorMessage = "Please select at least one photo.";
+    if (capturedPhotos.length === 0) {
+      const errorMessage = "Please capture at least one photo.";
       setError(errorMessage);
-      speechService.speakError(errorMessage);
       return;
     }
 
@@ -132,22 +234,25 @@ const PersonManagement = () => {
       setIsLoading(true);
       setError(null);
 
+      // Convert captured photos to File objects
+      const photoFiles = capturedPhotos.map((photoDataUrl, index) =>
+        dataURLtoFile(photoDataUrl, `photo_${index + 1}.jpg`)
+      );
+
       const newPerson = await facialRecognitionAPI.registerPerson(
         formData.name.trim(),
-        formData.photos,
+        photoFiles,
       );
 
       setPersons((prev) => [...prev, newPerson]);
-      const successMessage = `${formData.name} has been registered successfully.`;
+      const successMessage = `${formData.name} has been registered successfully with ${capturedPhotos.length} photos.`;
       setSuccess(successMessage);
-      speechService.speakInstruction(successMessage);
 
       resetForm();
       setIsDialogOpen(false);
     } catch (err) {
       const errorMessage = "Failed to register person. Please try again.";
       setError(errorMessage);
-      speechService.speakError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -155,101 +260,41 @@ const PersonManagement = () => {
 
   // Update existing person
   const handleUpdate = async () => {
-    if (!editingPerson || !formData.name.trim()) {
-      const errorMessage = "Please enter a valid name.";
-      setError(errorMessage);
-      speechService.speakError(errorMessage);
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const updatedPerson = await facialRecognitionAPI.updatePerson(
-        editingPerson.id,
-        formData.name.trim(),
-        formData.photos.length > 0 ? formData.photos : undefined,
-      );
-
-      setPersons((prev) =>
-        prev.map((p) => (p.id === editingPerson.id ? updatedPerson : p)),
-      );
-      const successMessage = `${formData.name} has been updated successfully.`;
-      setSuccess(successMessage);
-      speechService.speakInstruction(successMessage);
-
-      resetForm();
-      setIsDialogOpen(false);
-    } catch (err) {
-      const errorMessage = "Failed to update person. Please try again.";
-      setError(errorMessage);
-      speechService.speakError(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
+    setError("Update functionality is not available. The external facial recognition API doesn't support updating registered persons. Please register the person again with new photos if needed.");
   };
 
   // Delete person
   const handleDelete = async (person: Person) => {
-    if (window.confirm(`Are you sure you want to delete ${person.name}?`)) {
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        await facialRecognitionAPI.deletePerson(person.id);
-        setPersons((prev) => prev.filter((p) => p.id !== person.id));
-
-        const successMessage = `${person.name} has been deleted.`;
-        setSuccess(successMessage);
-        speechService.speakInstruction(successMessage);
-      } catch (err) {
-        const errorMessage = "Failed to delete person. Please try again.";
-        setError(errorMessage);
-        speechService.speakError(errorMessage);
-      } finally {
-        setIsLoading(false);
-      }
-    }
+    setError("Delete functionality is not available. The external facial recognition API doesn't support removing registered persons.");
   };
 
   // Open edit dialog
   const openEditDialog = (person: Person) => {
-    setEditingPerson(person);
-    setFormData({ name: person.name, photos: [] });
-    setIsDialogOpen(true);
-    speechService.speakInstruction(
-      `Editing ${person.name}. Update the name or add new photos.`,
-    );
+    setError("Edit functionality is not available. The external facial recognition API doesn't support updating registered persons.");
   };
 
   // Open create dialog
   const openCreateDialog = () => {
     resetForm();
     setIsDialogOpen(true);
-    speechService.speakInstruction(
-      "Register a new person. Enter their name and select photos.",
-    );
   };
 
+  // Clear captured photos
+  const clearPhotos = () => {
+    setCapturedPhotos([]);
+  };
+
+  // Cleanup on unmount
   useEffect(() => {
-    speechService.speakInstruction(
-      "Person Management. Register new people or manage existing ones for facial recognition.",
-    );
-    loadPersons();
-
-    // Clear messages after 5 seconds
-    const timer = setTimeout(() => {
-      setError(null);
-      setSuccess(null);
-    }, 5000);
-
-    return () => clearTimeout(timer);
+    return () => {
+      stopWebcam();
+    };
   }, []);
 
-  const handleAccessibilityChange = (settings: AccessibilitySettings) => {
-    setAccessibilitySettings(settings);
-  };
+  // Load initial data
+  useEffect(() => {
+    loadPersons();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
@@ -279,11 +324,6 @@ const PersonManagement = () => {
           </div>
         </div>
 
-        {/* Accessibility Controls */}
-        <div className="mb-6">
-          <AccessibilityControls onSettingsChange={handleAccessibilityChange} />
-        </div>
-
         {/* Alerts */}
         {error && (
           <Alert className="mb-6">
@@ -310,18 +350,17 @@ const PersonManagement = () => {
                   onClick={openCreateDialog}
                   className="flex items-center space-x-2"
                 >
-                  <UserPlus className="h-4 w-4" />
+                  <Plus className="h-4 w-4" />
                   <span>Add Person</span>
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-md">
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>
-                    {editingPerson ? "Edit Person" : "Register New Person"}
-                  </DialogTitle>
+                  <DialogTitle>Register New Person</DialogTitle>
                 </DialogHeader>
 
-                <div className="space-y-4">
+                <div className="space-y-6">
+                  {/* Name Input */}
                   <div className="space-y-2">
                     <Label htmlFor="person-name">Name</Label>
                     <Input
@@ -338,56 +377,154 @@ const PersonManagement = () => {
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="person-photos">
-                      {editingPerson ? "New Photos (optional)" : "Photos"}
-                    </Label>
-                    <Input
-                      ref={fileInputRef}
-                      id="person-photos"
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handlePhotoSelection}
-                      className="cursor-pointer"
-                    />
-                    <p className="text-xs text-gray-500">
-                      Select 2-5 clear photos of the person's face
-                    </p>
+                  {/* Webcam Section */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <Label>Webcam Capture</Label>
+                      {!isWebcamActive && (
+                        <Button
+                          onClick={startWebcam}
+                          variant="outline"
+                          size="sm"
+                          className="flex items-center space-x-2"
+                        >
+                          <Camera className="h-4 w-4" />
+                          <span>Start Camera</span>
+                        </Button>
+                      )}
+                      {isWebcamActive && (
+                        <Button
+                          onClick={stopWebcam}
+                          variant="outline"
+                          size="sm"
+                          className="flex items-center space-x-2"
+                        >
+                          <Square className="h-4 w-4" />
+                          <span>Stop Camera</span>
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Video Feed */}
+                    <div className="relative">
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full max-w-md mx-auto rounded-lg border bg-gray-100"
+                        style={{ display: isWebcamActive ? 'block' : 'none' }}
+                      />
+                      <canvas
+                        ref={canvasRef}
+                        className="hidden"
+                      />
+
+                      {isWebcamActive && (
+                        <div className="absolute top-4 right-4 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-sm">
+                          {isCapturing ? (
+                            <span>Recording... {countdown > 0 ? `${countdown}s` : ''}</span>
+                          ) : (
+                            <span>Ready</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Capture Controls */}
+                    {isWebcamActive && (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>Capture Interval: {captureInterval} seconds</Label>
+                          <Slider
+                            value={[captureInterval]}
+                            onValueChange={(value) => setCaptureInterval(value[0])}
+                            min={1}
+                            max={5}
+                            step={1}
+                            className="w-full"
+                            disabled={isCapturing}
+                          />
+                          <p className="text-xs text-gray-500">
+                            Photos will be taken every {captureInterval} second{captureInterval > 1 ? 's' : ''}
+                          </p>
+                        </div>
+
+                        <div className="flex space-x-2">
+                          {!isCapturing ? (
+                            <Button
+                              onClick={startCapturing}
+                              className="flex items-center space-x-2"
+                            >
+                              <Play className="h-4 w-4" />
+                              <span>Start Capturing</span>
+                            </Button>
+                          ) : (
+                            <Button
+                              onClick={stopCapturing}
+                              variant="destructive"
+                              className="flex items-center space-x-2"
+                            >
+                              <Square className="h-4 w-4" />
+                              <span>Stop Capturing</span>
+                            </Button>
+                          )}
+
+                          {capturedPhotos.length > 0 && (
+                            <Button
+                              onClick={clearPhotos}
+                              variant="outline"
+                              className="flex items-center space-x-2"
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                              <span>Clear Photos</span>
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  {formData.photos.length > 0 && (
+                  {/* Captured Photos Preview */}
+                  {capturedPhotos.length > 0 && (
                     <div className="space-y-2">
-                      <Label>Selected Photos ({formData.photos.length})</Label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {formData.photos.map((photo, index) => (
+                      <Label>Captured Photos ({capturedPhotos.length})</Label>
+                      <div className="grid grid-cols-4 gap-2 max-h-64 overflow-y-auto">
+                        {capturedPhotos.map((photo, index) => (
                           <div key={index} className="relative">
                             <img
-                              src={URL.createObjectURL(photo)}
-                              alt={`Photo ${index + 1}`}
-                              className="w-full h-16 object-cover rounded border"
+                              src={photo}
+                              alt={`Captured photo ${index + 1}`}
+                              className="w-full h-20 object-cover rounded border"
                             />
+                            <div className="absolute top-1 right-1 bg-blue-600 text-white text-xs px-1 rounded">
+                              {index + 1}
+                            </div>
                           </div>
                         ))}
                       </div>
+                      <p className="text-xs text-gray-500">
+                        {capturedPhotos.length < 2 && "Capture at least 2 photos for better recognition"}
+                        {capturedPhotos.length >= 2 && capturedPhotos.length < 5 && "Good! You can capture more photos or proceed to register"}
+                        {capturedPhotos.length >= 5 && "Excellent! You have enough photos for accurate recognition"}
+                      </p>
                     </div>
                   )}
 
+                  {/* Action Buttons */}
                   <div className="flex space-x-2">
                     <Button
-                      onClick={editingPerson ? handleUpdate : handleCreate}
+                      onClick={handleCreate}
                       disabled={
                         isLoading ||
                         !formData.name.trim() ||
-                        (!editingPerson && formData.photos.length === 0)
+                        capturedPhotos.length === 0
                       }
                       className="flex-1"
                     >
                       {isLoading
-                        ? "Processing..."
-                        : editingPerson
-                          ? "Update"
-                          : "Register"}
+                        ? "Registering..."
+                        : `Register with ${capturedPhotos.length} photo${capturedPhotos.length !== 1 ? 's' : ''}`}
                     </Button>
                     <Button
                       variant="outline"
@@ -445,7 +582,7 @@ const PersonManagement = () => {
               </div>
             ) : filteredPersons.length === 0 ? (
               <div className="text-center py-8">
-                <UserPlus className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                <Users className="h-12 w-12 mx-auto mb-4 text-gray-400" />
                 <p className="text-gray-600 mb-2">
                   {searchTerm
                     ? "No people found matching your search"
@@ -500,6 +637,8 @@ const PersonManagement = () => {
                             size="sm"
                             className="h-8 w-8 p-0"
                             aria-label={`Edit ${person.name}`}
+                            disabled={true}
+                            title="Edit not available - API limitation"
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
@@ -509,6 +648,8 @@ const PersonManagement = () => {
                             size="sm"
                             className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
                             aria-label={`Delete ${person.name}`}
+                            disabled={true}
+                            title="Delete not available - API limitation"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -522,6 +663,16 @@ const PersonManagement = () => {
           </CardContent>
         </Card>
 
+        {/* API Limitations Notice */}
+        <div className="mt-6">
+          <Alert className="border-amber-200 bg-amber-50">
+            <AlertCircle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-800">
+              <strong>API Limitations:</strong> The external facial recognition service doesn't support listing, updating, or deleting registered persons. Once a person is registered, they cannot be removed or modified. Face recognition will work for all registered persons.
+            </AlertDescription>
+          </Alert>
+        </div>
+
         {/* Help Section */}
         <div className="mt-6 grid md:grid-cols-2 gap-4">
           <Card>
@@ -529,12 +680,13 @@ const PersonManagement = () => {
               <CardTitle className="text-lg">How It Works</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-gray-600 space-y-2">
-              <p>• Register people with 2-5 clear photos of their face</p>
-              <p>• The system will learn to recognize them automatically</p>
-              <p>
-                • When analyzing images, recognized people will be identified
-              </p>
-              <p>• You can update or remove people at any time</p>
+              <p>• Click "Add Person" to start webcam registration</p>
+              <p>• Enter the person's name and start the camera</p>
+              <p>• Click "Start Capturing" to take photos automatically</p>
+              <p>• Photos are taken every 1-5 seconds (adjustable)</p>
+              <p>• Stop capturing when you have enough photos (2-10 recommended)</p>
+              <p>• Click "Register" to save the person to the system</p>
+              <p>• <strong>Note:</strong> Registered persons cannot be removed or updated</p>
             </CardContent>
           </Card>
 
@@ -543,10 +695,12 @@ const PersonManagement = () => {
               <CardTitle className="text-lg">Tips for Best Results</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-gray-600 space-y-2">
-              <p>• Use well-lit, clear photos</p>
-              <p>• Include different angles and expressions</p>
-              <p>• Avoid photos with multiple faces</p>
-              <p>• Higher quality photos improve recognition accuracy</p>
+              <p>• Ensure good lighting and clear view of the face</p>
+              <p>• Capture different angles and expressions</p>
+              <p>• Have the person move slightly between captures</p>
+              <p>• Avoid capturing when others are in frame</p>
+              <p>• 3-5 photos usually provide good recognition accuracy</p>
+              <p>• <strong>Register carefully</strong> - changes cannot be made later</p>
             </CardContent>
           </Card>
         </div>

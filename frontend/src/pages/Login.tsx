@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { Eye, LogIn, Building, Key, AlertCircle, Check, Info } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { Eye, LogIn, UserPlus, Mail, Lock, AlertCircle, Check, Info, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { facialRecognitionAPI } from "@/services/facialRecognitionAPI";
-import { speechService } from "@/services/speechService";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Interfaces for form validation
 interface FieldError {
@@ -17,263 +16,218 @@ interface FieldError {
 }
 
 interface LoginFormErrors {
-  apiKey?: FieldError;
-  organizationId?: FieldError;
+  email?: FieldError;
+  password?: FieldError;
   form?: string;
 }
 
-interface OrganizationFormErrors {
-  orgName?: FieldError;
+interface RegisterFormErrors {
+  username?: FieldError;
+  email?: FieldError;
+  password?: FieldError;
+  confirmPassword?: FieldError;
   form?: string;
 }
 
 const Login = () => {
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
+  const location = useLocation();
+  const { login, register, isAuthenticated, isLoading } = useAuth();
+
   const [error, setError] = useState<string | null>(null);
 
   // Login form state
-  const [apiKey, setApiKey] = useState("");
-  const [organizationId, setOrganizationId] = useState("");
+  const [loginForm, setLoginForm] = useState({
+    email: "",
+    password: "",
+  });
   const [loginErrors, setLoginErrors] = useState<LoginFormErrors>({});
 
-  // Organization creation state
-  const [newOrgName, setNewOrgName] = useState("");
-  const [orgErrors, setOrgErrors] = useState<OrganizationFormErrors>({});
+  // Registration form state
+  const [registerForm, setRegisterForm] = useState({
+    username: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
+  const [registerErrors, setRegisterErrors] = useState<RegisterFormErrors>({});
 
   // Current tab state
   const [activeTab, setActiveTab] = useState("login");
 
+  // Redirect if already authenticated
   useEffect(() => {
-    speechService.speakInstruction(
-      "Welcome to SmallBlind login. Enter your organization details or create a new organization to get started.",
-    );
-  }, []);
+    if (isAuthenticated) {
+      const from = location.state?.from?.pathname || "/";
+      navigate(from, { replace: true });
+    }
+  }, [isAuthenticated, navigate, location]);
 
   // Validation functions
-  const validateApiKey = (value: string): FieldError | undefined => {
+  const validateEmail = (value: string): FieldError | undefined => {
     if (!value.trim()) {
-      return { 
-        message: "API key is required", 
-        type: "error" 
-      };
+      return { message: "Email is required", type: "error" };
     }
-    
-    if (value.trim().length < 8) {
-      return { 
-        message: "API key should be at least 8 characters long", 
-        type: "error" 
-      };
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(value)) {
+      return { message: "Please enter a valid email address", type: "error" };
     }
-
-    if (!/^[a-zA-Z0-9_-]+$/.test(value)) {
-      return {
-        message: "API key should only contain letters, numbers, hyphens, and underscores",
-        type: "error"
-      };
-    }
-    
     return undefined;
   };
 
-  const validateOrganizationId = (value: string): FieldError | undefined => {
+  const validatePassword = (value: string): FieldError | undefined => {
     if (!value.trim()) {
-      return { 
-        message: "Organization ID is required", 
-        type: "error" 
-      };
+      return { message: "Password is required", type: "error" };
     }
-    
-    if (!/^[a-zA-Z0-9_-]+$/.test(value)) {
-      return {
-        message: "Organization ID should only contain letters, numbers, hyphens, and underscores",
-        type: "error"
-      };
+    if (value.length < 8) {
+      return { message: "Password must be at least 8 characters long", type: "error" };
     }
-    
     return undefined;
   };
 
-  const validateOrganizationName = (value: string): FieldError | undefined => {
+  const validateUsername = (value: string): FieldError | undefined => {
     if (!value.trim()) {
-      return { 
-        message: "Organization name is required", 
-        type: "error" 
-      };
+      return { message: "Username is required", type: "error" };
     }
-    
     if (value.trim().length < 3) {
-      return { 
-        message: "Organization name should be at least 3 characters long", 
-        type: "error" 
-      };
+      return { message: "Username must be at least 3 characters long", type: "error" };
     }
-    
-    if (value.trim().length > 50) {
-      return { 
-        message: "Organization name should not exceed 50 characters", 
-        type: "error" 
-      };
+    if (!/^[a-zA-Z0-9_-]+$/.test(value)) {
+      return { message: "Username can only contain letters, numbers, hyphens, and underscores", type: "error" };
     }
-    
+    return undefined;
+  };
+
+  const validateConfirmPassword = (value: string, password: string): FieldError | undefined => {
+    if (!value.trim()) {
+      return { message: "Please confirm your password", type: "error" };
+    }
+    if (value !== password) {
+      return { message: "Passwords do not match", type: "error" };
+    }
     return undefined;
   };
 
   // Form validation
   const validateLoginForm = (): boolean => {
     const newErrors: LoginFormErrors = {};
-    
-    const apiKeyError = validateApiKey(apiKey);
-    if (apiKeyError) newErrors.apiKey = apiKeyError;
-    
-    const orgIdError = validateOrganizationId(organizationId);
-    if (orgIdError) newErrors.organizationId = orgIdError;
-    
+
+    const emailError = validateEmail(loginForm.email);
+    if (emailError) newErrors.email = emailError;
+
+    const passwordError = validatePassword(loginForm.password);
+    if (passwordError) newErrors.password = passwordError;
+
     setLoginErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const validateOrgForm = (): boolean => {
-    const newErrors: OrganizationFormErrors = {};
-    
-    const orgNameError = validateOrganizationName(newOrgName);
-    if (orgNameError) newErrors.orgName = orgNameError;
-    
-    setOrgErrors(newErrors);
+  const validateRegisterForm = (): boolean => {
+    const newErrors: RegisterFormErrors = {};
+
+    const usernameError = validateUsername(registerForm.username);
+    if (usernameError) newErrors.username = usernameError;
+
+    const emailError = validateEmail(registerForm.email);
+    if (emailError) newErrors.email = emailError;
+
+    const passwordError = validatePassword(registerForm.password);
+    if (passwordError) newErrors.password = passwordError;
+
+    const confirmPasswordError = validateConfirmPassword(registerForm.confirmPassword, registerForm.password);
+    if (confirmPasswordError) newErrors.confirmPassword = confirmPasswordError;
+
+    setRegisterErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   // Handle input changes with validation
-  const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLoginChange = (field: keyof typeof loginForm) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    setApiKey(value);
-    
+    setLoginForm(prev => ({ ...prev, [field]: value }));
+
     // Real-time validation
-    const error = validateApiKey(value);
-    setLoginErrors(prev => ({ ...prev, apiKey: error }));
+    let error: FieldError | undefined;
+    if (field === 'email') {
+      error = validateEmail(value);
+    } else if (field === 'password') {
+      error = validatePassword(value);
+    }
+
+    setLoginErrors(prev => ({ ...prev, [field]: error }));
   };
 
-  const handleOrgIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleRegisterChange = (field: keyof typeof registerForm) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    setOrganizationId(value);
-    
-    // Real-time validation
-    const error = validateOrganizationId(value);
-    setLoginErrors(prev => ({ ...prev, organizationId: error }));
-  };
+    setRegisterForm(prev => ({ ...prev, [field]: value }));
 
-  const handleOrgNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setNewOrgName(value);
-    
     // Real-time validation
-    const error = validateOrganizationName(value);
-    setOrgErrors(prev => ({ ...prev, orgName: error }));
+    let error: FieldError | undefined;
+    if (field === 'username') {
+      error = validateUsername(value);
+    } else if (field === 'email') {
+      error = validateEmail(value);
+    } else if (field === 'password') {
+      error = validatePassword(value);
+    } else if (field === 'confirmPassword') {
+      error = validateConfirmPassword(value, registerForm.password);
+    }
+
+    setRegisterErrors(prev => ({ ...prev, [field]: error }));
   };
 
   // Tab change handler
   const handleTabChange = (value: string) => {
     setActiveTab(value);
-    // Clear form-level errors when switching tabs
     setError(null);
-    setLoginErrors(prev => ({ ...prev, form: undefined }));
-    setOrgErrors(prev => ({ ...prev, form: undefined }));
+    setLoginErrors({});
+    setRegisterErrors({});
   };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate form
     if (!validateLoginForm()) {
-      speechService.speakError("Please correct the errors in the form.");
       return;
     }
 
     try {
-      setIsLoading(true);
       setError(null);
-      setLoginErrors({});
-
-      // Set credentials in the API service
-      facialRecognitionAPI.setCredentials(apiKey.trim(), organizationId.trim());
-
-      // Test the connection by trying to fetch persons
-      await facialRecognitionAPI.getPersons();
-
-      // Store credentials in localStorage for persistence
-      localStorage.setItem("smallblind_api_key", apiKey.trim());
-      localStorage.setItem("smallblind_organization_id", organizationId.trim());
-
-      speechService.speakInstruction(
-        "Login successful. Redirecting to main menu.",
-      );
-      navigate("/menu");
+      await login(loginForm);
+      // Navigation is handled by the useEffect above
     } catch (err) {
-      const errorMessage =
-        "Login failed. Please check your credentials and try again.";
-      setLoginErrors(prev => ({ ...prev, form: errorMessage }));
-      speechService.speakError(errorMessage);
-    } finally {
-      setIsLoading(false);
+      const errorMessage = err instanceof Error ? err.message : "Login failed. Please check your credentials.";
+      setError(errorMessage);
+      setLoginErrors({ form: errorMessage });
     }
   };
 
-  const handleCreateOrganization = async (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate form
-    if (!validateOrgForm()) {
-      speechService.speakError("Please correct the errors in the form.");
+    if (!validateRegisterForm()) {
       return;
     }
 
     try {
-      setIsLoading(true);
       setError(null);
-      setOrgErrors({});
-
-      const organization = await facialRecognitionAPI.createOrganization(
-        newOrgName.trim(),
-      );
-
-      // Auto-fill the login form with new organization details
-      setApiKey(organization.apiKey);
-      setOrganizationId(organization.id);
-
-      // Switch to login tab
-      setActiveTab("login");
-      
-      speechService.speakInstruction(
-        `Organization ${newOrgName} created successfully. Your credentials have been filled in automatically.`,
-      );
+      await register({
+        username: registerForm.username.trim(),
+        email: registerForm.email.trim(),
+        password: registerForm.password,
+      });
+      // Navigation is handled by the useEffect above
     } catch (err) {
-      const errorMessage = "Failed to create organization. Please try again.";
-      setOrgErrors(prev => ({ ...prev, form: errorMessage }));
-      speechService.speakError(errorMessage);
-    } finally {
-      setIsLoading(false);
+      const errorMessage = err instanceof Error ? err.message : "Registration failed. Please try again.";
+      setError(errorMessage);
+      setRegisterErrors({ form: errorMessage });
     }
   };
-
-  // Check for existing credentials on component mount
-  useEffect(() => {
-    const savedApiKey = localStorage.getItem("smallblind_api_key");
-    const savedOrgId = localStorage.getItem("smallblind_organization_id");
-
-    if (savedApiKey && savedOrgId) {
-      setApiKey(savedApiKey);
-      setOrganizationId(savedOrgId);
-      facialRecognitionAPI.setCredentials(savedApiKey, savedOrgId);
-      speechService.speakInstruction(
-        "Found saved credentials. You can log in or update them.",
-      );
-    }
-  }, []);
 
   // Helper to render field error
   const renderFieldError = (error?: FieldError) => {
     if (!error) return null;
-    
+
     return (
       <div className="flex items-start mt-1 text-xs">
         {error.type === "error" && <AlertCircle className="h-3 w-3 text-red-500 mr-1 mt-0.5 flex-shrink-0" />}
@@ -308,9 +262,9 @@ const Login = () => {
               <LogIn className="h-4 w-4" />
               <span>Login</span>
             </TabsTrigger>
-            <TabsTrigger value="create" className="flex items-center space-x-2">
-              <Building className="h-4 w-4" />
-              <span>Create</span>
+            <TabsTrigger value="register" className="flex items-center space-x-2">
+              <UserPlus className="h-4 w-4" />
+              <span>Register</span>
             </TabsTrigger>
           </TabsList>
 
@@ -325,52 +279,51 @@ const Login = () => {
               <CardContent>
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="api-key" className="text-sm font-medium">
-                      API Key
+                    <Label htmlFor="login-email" className="text-sm font-medium">
+                      Email
                     </Label>
                     <div className="relative">
-                      <Key className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                       <Input
-                        id="api-key"
-                        type="password"
-                        value={apiKey}
-                        onChange={handleApiKeyChange}
-                        placeholder="Enter your API key"
-                        className={`pl-10 text-lg ${loginErrors.apiKey ? "border-red-500" : ""}`}
+                        id="login-email"
+                        type="email"
+                        value={loginForm.email}
+                        onChange={handleLoginChange('email')}
+                        placeholder="Enter your email"
+                        className={`pl-10 ${loginErrors.email ? "border-red-500" : ""}`}
                         disabled={isLoading}
-                        aria-invalid={!!loginErrors.apiKey}
-                        aria-describedby={loginErrors.apiKey ? "api-key-error" : undefined}
+                        aria-invalid={!!loginErrors.email}
                         required
                       />
-                      {apiKey.trim() && !loginErrors.apiKey && (
+                      {loginForm.email.trim() && !loginErrors.email && (
                         <Check className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-green-500" />
                       )}
                     </div>
-                    {renderFieldError(loginErrors.apiKey)}
+                    {renderFieldError(loginErrors.email)}
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="org-id" className="text-sm font-medium">
-                      Organization ID
+                    <Label htmlFor="login-password" className="text-sm font-medium">
+                      Password
                     </Label>
                     <div className="relative">
-                      <Building className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                       <Input
-                        id="org-id"
-                        value={organizationId}
-                        onChange={handleOrgIdChange}
-                        placeholder="Enter organization ID"
-                        className={`pl-10 text-lg ${loginErrors.organizationId ? "border-red-500" : ""}`}
+                        id="login-password"
+                        type="password"
+                        value={loginForm.password}
+                        onChange={handleLoginChange('password')}
+                        placeholder="Enter your password"
+                        className={`pl-10 ${loginErrors.password ? "border-red-500" : ""}`}
                         disabled={isLoading}
-                        aria-invalid={!!loginErrors.organizationId}
-                        aria-describedby={loginErrors.organizationId ? "org-id-error" : undefined}
+                        aria-invalid={!!loginErrors.password}
                         required
                       />
-                      {organizationId.trim() && !loginErrors.organizationId && (
+                      {loginForm.password.trim() && !loginErrors.password && (
                         <Check className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-green-500" />
                       )}
                     </div>
-                    {renderFieldError(loginErrors.organizationId)}
+                    {renderFieldError(loginErrors.password)}
                   </div>
 
                   {loginErrors.form && (
@@ -383,7 +336,7 @@ const Login = () => {
                   <Button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full text-lg py-6"
+                    className="w-full"
                   >
                     {isLoading ? "Signing In..." : "Sign In"}
                   </Button>
@@ -392,92 +345,131 @@ const Login = () => {
             </Card>
           </TabsContent>
 
-          {/* Create Organization Tab */}
-          <TabsContent value="create">
+          {/* Register Tab */}
+          <TabsContent value="register">
             <Card>
               <CardHeader>
                 <CardTitle className="text-xl font-semibold text-center">
-                  Create Organization
+                  Create Account
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleCreateOrganization} className="space-y-4">
+                <form onSubmit={handleRegister} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="org-name" className="text-sm font-medium">
-                      Organization Name
+                    <Label htmlFor="register-username" className="text-sm font-medium">
+                      Username
                     </Label>
                     <div className="relative">
-                      <Building className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                       <Input
-                        id="org-name"
-                        value={newOrgName}
-                        onChange={handleOrgNameChange}
-                        placeholder="Enter organization name"
-                        className={`pl-10 text-lg ${orgErrors.orgName ? "border-red-500" : ""}`}
+                        id="register-username"
+                        type="text"
+                        value={registerForm.username}
+                        onChange={handleRegisterChange('username')}
+                        placeholder="Choose a username"
+                        className={`pl-10 ${registerErrors.username ? "border-red-500" : ""}`}
                         disabled={isLoading}
-                        aria-invalid={!!orgErrors.orgName}
-                        aria-describedby={orgErrors.orgName ? "org-name-error" : undefined}
+                        aria-invalid={!!registerErrors.username}
                         required
-                        minLength={3}
-                        maxLength={50}
                       />
-                      {newOrgName.trim() && !orgErrors.orgName && (
+                      {registerForm.username.trim() && !registerErrors.username && (
                         <Check className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-green-500" />
                       )}
                     </div>
-                    {renderFieldError(orgErrors.orgName)}
-                    <p className="text-xs text-gray-500">
-                      This will create a new organization and generate API
-                      credentials
-                    </p>
+                    {renderFieldError(registerErrors.username)}
                   </div>
 
-                  {orgErrors.form && (
+                  <div className="space-y-2">
+                    <Label htmlFor="register-email" className="text-sm font-medium">
+                      Email
+                    </Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        id="register-email"
+                        type="email"
+                        value={registerForm.email}
+                        onChange={handleRegisterChange('email')}
+                        placeholder="Enter your email"
+                        className={`pl-10 ${registerErrors.email ? "border-red-500" : ""}`}
+                        disabled={isLoading}
+                        aria-invalid={!!registerErrors.email}
+                        required
+                      />
+                      {registerForm.email.trim() && !registerErrors.email && (
+                        <Check className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-green-500" />
+                      )}
+                    </div>
+                    {renderFieldError(registerErrors.email)}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="register-password" className="text-sm font-medium">
+                      Password
+                    </Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        id="register-password"
+                        type="password"
+                        value={registerForm.password}
+                        onChange={handleRegisterChange('password')}
+                        placeholder="Create a password"
+                        className={`pl-10 ${registerErrors.password ? "border-red-500" : ""}`}
+                        disabled={isLoading}
+                        aria-invalid={!!registerErrors.password}
+                        required
+                      />
+                      {registerForm.password.trim() && !registerErrors.password && (
+                        <Check className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-green-500" />
+                      )}
+                    </div>
+                    {renderFieldError(registerErrors.password)}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="register-confirm-password" className="text-sm font-medium">
+                      Confirm Password
+                    </Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        id="register-confirm-password"
+                        type="password"
+                        value={registerForm.confirmPassword}
+                        onChange={handleRegisterChange('confirmPassword')}
+                        placeholder="Confirm your password"
+                        className={`pl-10 ${registerErrors.confirmPassword ? "border-red-500" : ""}`}
+                        disabled={isLoading}
+                        aria-invalid={!!registerErrors.confirmPassword}
+                        required
+                      />
+                      {registerForm.confirmPassword.trim() && !registerErrors.confirmPassword && (
+                        <Check className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-green-500" />
+                      )}
+                    </div>
+                    {renderFieldError(registerErrors.confirmPassword)}
+                  </div>
+
+                  {registerErrors.form && (
                     <Alert className="bg-red-50 border-red-200 text-red-800">
                       <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>{orgErrors.form}</AlertDescription>
+                      <AlertDescription>{registerErrors.form}</AlertDescription>
                     </Alert>
                   )}
 
                   <Button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full text-lg py-6"
+                    className="w-full"
                   >
-                    {isLoading ? "Creating..." : "Create Organization"}
+                    {isLoading ? "Creating Account..." : "Create Account"}
                   </Button>
-
-                  {apiKey && organizationId && activeTab === "create" && (
-                    <div className="mt-4 p-4 bg-green-50 rounded-lg">
-                      <p className="text-sm text-green-800 font-medium mb-2">
-                        Organization created successfully!
-                      </p>
-                      <p className="text-xs text-green-700">
-                        Your credentials have been auto-filled in the login tab.
-                        Switch to the login tab to sign in.
-                      </p>
-                    </div>
-                  )}
                 </form>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
-
-        {/* Help Text */}
-        <div className="mt-6 text-center">
-          <p className="text-sm text-gray-500">
-            Need help? The facial recognition service should be running and
-            accessible.
-          </p>
-          <Button
-            variant="link"
-            onClick={() => navigate("/")}
-            className="text-blue-600 p-0 mt-2"
-          >
-            Continue without login (limited features)
-          </Button>
-        </div>
       </div>
     </div>
   );

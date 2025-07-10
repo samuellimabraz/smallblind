@@ -1,5 +1,7 @@
 import { VisionAnalysisResult, DetectedObject } from "@/types";
 import { env } from "@/lib/env";
+import { objectDetectionService } from "./objectDetectionService";
+import { imageDescriptionService } from "./imageDescriptionService";
 
 class VisionModelsService {
   private readonly HUGGING_FACE_API_URL =
@@ -34,22 +36,39 @@ class VisionModelsService {
 
   async detectObjects(imageFile: File): Promise<VisionAnalysisResult> {
     try {
-      // Using DETR (Detection Transformer) for object detection
-      const result = await this.callHuggingFaceAPI(
-        "facebook/detr-resnet-50",
-        imageFile,
-      );
+      // Use the real backend object detection service
+      const result = await objectDetectionService.detectObjects(imageFile, {
+        threshold: 0.5,
+        maxObjects: 20,
+      });
 
-      const objects: DetectedObject[] = result.map((detection: any) => ({
-        label: detection.label,
-        confidence: detection.score,
-        boundingBox: {
+      if (!result.success) {
+        throw new Error("Object detection failed");
+      }
+
+      console.log("Raw detection result:", result);
+
+      const objects: DetectedObject[] = result.data.detections.map((detection) => {
+        console.log("Processing detection:", detection);
+
+        const boundingBox = {
+          // Use the coordinates directly from the backend
           x: detection.box.xmin,
           y: detection.box.ymin,
-          width: detection.box.xmax - detection.box.xmin,
-          height: detection.box.ymax - detection.box.ymin,
-        },
-      }));
+          width: detection.box.width,
+          height: detection.box.height,
+        };
+
+        console.log("Mapped bounding box:", boundingBox);
+
+        return {
+          label: detection.label,
+          confidence: detection.score,
+          boundingBox,
+        };
+      });
+
+      console.log("Final mapped objects:", objects);
 
       const description =
         objects.length > 0
@@ -65,13 +84,16 @@ class VisionModelsService {
         description,
         objects,
         timestamp: new Date(),
+        processingTime: result.data.processingTime,
+        model: result.data.model,
+        imageFile, // Include the original image file for bounding box rendering
       };
     } catch (error) {
       console.error("Object detection error:", error);
       return {
         type: "object-detection",
         confidence: 0,
-        description: "Unable to detect objects in the image.",
+        description: `Unable to detect objects in the image. ${error instanceof Error ? error.message : "Unknown error"}`,
         objects: [],
         timestamp: new Date(),
       };
@@ -80,30 +102,31 @@ class VisionModelsService {
 
   async performOCR(imageFile: File): Promise<VisionAnalysisResult> {
     try {
-      // Using TrOCR for optical character recognition
-      const result = await this.callHuggingFaceAPI(
-        "microsoft/trocr-base-printed",
-        imageFile,
-      );
+      // Use the backend image description service with OCR prompt
+      const result = await imageDescriptionService.extractText(imageFile);
 
-      const text = result.generated_text || "";
+      if (!result.success) {
+        throw new Error("Text extraction failed");
+      }
+
+      const text = result.data.description;
+      const hasText = text && text.toLowerCase() !== "no text found" && text.trim().length > 0;
 
       return {
         type: "ocr",
-        confidence: text.length > 0 ? 0.8 : 0,
-        description:
-          text.length > 0
-            ? `Text found: "${text}"`
-            : "No text detected in the image.",
-        text,
+        confidence: hasText ? 0.8 : 0,
+        description: hasText ? `Text found: "${text}"` : "No text detected in the image.",
+        text: hasText ? text : "",
         timestamp: new Date(),
+        processingTime: result.data.processingTime,
+        model: result.data.model,
       };
     } catch (error) {
       console.error("OCR error:", error);
       return {
         type: "ocr",
         confidence: 0,
-        description: "Unable to read text from the image.",
+        description: `Unable to read text from the image. ${error instanceof Error ? error.message : "Unknown error"}`,
         text: "",
         timestamp: new Date(),
       };
@@ -112,27 +135,29 @@ class VisionModelsService {
 
   async describeScene(imageFile: File): Promise<VisionAnalysisResult> {
     try {
-      // Using BLIP for image captioning
-      const result = await this.callHuggingFaceAPI(
-        "Salesforce/blip-image-captioning-large",
-        imageFile,
-      );
+      // Use the backend image description service with scene description prompt
+      const result = await imageDescriptionService.describeScene(imageFile);
 
-      const description =
-        result.generated_text || "Unable to describe the scene.";
+      if (!result.success) {
+        throw new Error("Scene description failed");
+      }
+
+      const description = result.data.description;
 
       return {
         type: "scene-description",
         confidence: 0.8,
-        description: `Scene description: ${description}`,
+        description: description,
         timestamp: new Date(),
+        processingTime: result.data.processingTime,
+        model: result.data.model,
       };
     } catch (error) {
       console.error("Scene description error:", error);
       return {
         type: "scene-description",
         confidence: 0,
-        description: "Unable to describe the scene.",
+        description: `Unable to describe the scene. ${error instanceof Error ? error.message : "Unknown error"}`,
         timestamp: new Date(),
       };
     }

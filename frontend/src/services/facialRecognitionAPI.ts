@@ -1,23 +1,24 @@
 import { Person, Organization } from "@/types";
 import { env } from "@/lib/env";
 
-const API_BASE_URL = env.FACIAL_RECOGNITION_API_URL;
-("http://localhost:8000/api");
+const API_BASE_URL = env.BACKEND_API_URL;
 
 class FacialRecognitionAPI {
-  private apiKey: string | null = null;
-  private organizationId: string | null = null;
+  private token: string | null = null;
 
-  setCredentials(apiKey: string, organizationId: string) {
-    this.apiKey = apiKey;
-    this.organizationId = organizationId;
+  constructor() {
+    this.token = localStorage.getItem('smallblind_token');
+  }
+
+  setToken(token: string) {
+    this.token = token;
+    localStorage.setItem('smallblind_token', token);
   }
 
   private async request(endpoint: string, options: RequestInit = {}) {
-    const url = `${API_BASE_URL}${endpoint}`;
+    const url = `${API_BASE_URL}/facial-recognition${endpoint}`;
     const headers = {
-      "Content-Type": "application/json",
-      ...(this.apiKey && { Authorization: `Bearer ${this.apiKey}` }),
+      ...(this.token && { Authorization: `Bearer ${this.token}` }),
       ...options.headers,
     };
 
@@ -33,26 +34,24 @@ class FacialRecognitionAPI {
     return response.json();
   }
 
-  async createOrganization(name: string): Promise<Organization> {
-    return this.request("/organizations", {
+  async initializeOrganization(): Promise<any> {
+    return this.request("/initialize", {
       method: "POST",
-      body: JSON.stringify({ name }),
     });
   }
 
   async registerPerson(name: string, photos: File[]): Promise<Person> {
     const formData = new FormData();
     formData.append("name", name);
-    formData.append("organizationId", this.organizationId || "");
 
-    photos.forEach((photo, index) => {
-      formData.append(`photo_${index}`, photo);
+    photos.forEach((photo) => {
+      formData.append("photos", photo);
     });
 
-    const response = await fetch(`${API_BASE_URL}/persons`, {
+    const response = await fetch(`${API_BASE_URL}/facial-recognition/register`, {
       method: "POST",
       headers: {
-        ...(this.apiKey && { Authorization: `Bearer ${this.apiKey}` }),
+        ...(this.token && { Authorization: `Bearer ${this.token}` }),
       },
       body: formData,
     });
@@ -61,11 +60,13 @@ class FacialRecognitionAPI {
       throw new Error(`Failed to register person: ${response.statusText}`);
     }
 
-    return response.json();
+    const result = await response.json();
+    return result.person;
   }
 
   async getPersons(): Promise<Person[]> {
-    return this.request(`/persons?organizationId=${this.organizationId}`);
+    const result = await this.request("/persons");
+    return result.persons || [];
   }
 
   async updatePerson(
@@ -73,34 +74,29 @@ class FacialRecognitionAPI {
     name: string,
     photos?: File[],
   ): Promise<Person> {
+    const formData = new FormData();
+    formData.append("name", name);
+
     if (photos && photos.length > 0) {
-      const formData = new FormData();
-      formData.append("name", name);
-      formData.append("organizationId", this.organizationId || "");
-
-      photos.forEach((photo, index) => {
-        formData.append(`photo_${index}`, photo);
-      });
-
-      const response = await fetch(`${API_BASE_URL}/persons/${id}`, {
-        method: "PUT",
-        headers: {
-          ...(this.apiKey && { Authorization: `Bearer ${this.apiKey}` }),
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to update person: ${response.statusText}`);
-      }
-
-      return response.json();
-    } else {
-      return this.request(`/persons/${id}`, {
-        method: "PUT",
-        body: JSON.stringify({ name }),
+      photos.forEach((photo) => {
+        formData.append("photos", photo);
       });
     }
+
+    const response = await fetch(`${API_BASE_URL}/facial-recognition/persons/${id}`, {
+      method: "PUT",
+      headers: {
+        ...(this.token && { Authorization: `Bearer ${this.token}` }),
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update person: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    return result.person;
   }
 
   async deletePerson(id: string): Promise<void> {
@@ -109,24 +105,38 @@ class FacialRecognitionAPI {
     });
   }
 
-  async recognizeFace(imageFile: File): Promise<any> {
+  async recognizeFace(imageFile: File, threshold: number = 0.5): Promise<any> {
+    console.log(`Preparing to recognize face, threshold: ${threshold}, image size: ${imageFile.size} bytes`);
+    
     const formData = new FormData();
     formData.append("image", imageFile);
-    formData.append("organizationId", this.organizationId || "");
+    formData.append("threshold", threshold.toString());
 
-    const response = await fetch(`${API_BASE_URL}/recognize`, {
+    console.log("Sending face recognition request to backend...");
+    
+    const response = await fetch(`${API_BASE_URL}/facial-recognition/recognize`, {
       method: "POST",
       headers: {
-        ...(this.apiKey && { Authorization: `Bearer ${this.apiKey}` }),
+        ...(this.token && { Authorization: `Bearer ${this.token}` }),
       },
       body: formData,
     });
 
+    console.log(`Face recognition response status: ${response.status}`);
+    
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Face recognition error response:", errorText);
       throw new Error(`Face recognition failed: ${response.statusText}`);
     }
 
-    return response.json();
+    const result = await response.json();
+    console.log("Face recognition parsed response:", JSON.stringify(result, null, 2));
+    return result;
+  }
+
+  async getConfig(): Promise<any> {
+    return this.request("/config");
   }
 }
 
