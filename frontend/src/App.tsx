@@ -1,87 +1,41 @@
-import React from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
-import { AuthProvider, useAuth } from './contexts/AuthContext'
-import LoginPage from './pages/LoginPage'
-import MainMenu from './pages/MainMenu'
-import PeopleManagement from './pages/PeopleManagement'
-import VisionAnalysis from './pages/VisionAnalysis'
-import Settings from './pages/Settings'
-import LoadingSpinner from './components/LoadingSpinner'
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { validateEnvironment } from "@/lib/env";
+import Index from "./pages/Index";
+import Login from "./pages/Login";
+import MainMenu from "./pages/MainMenu";
+import PersonManagement from "./pages/PersonManagement";
+import CameraPage from "./pages/CameraPage";
+import SettingsPage from "./pages/SettingsPage";
+import NotFound from "./pages/NotFound";
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth()
-  
-  if (loading) {
-    return <LoadingSpinner />
-  }
-  
-  if (!user) {
-    return <Navigate to="/login\" replace />
-  }
-  
-  return <>{children}</>
-}
+const queryClient = new QueryClient();
 
-function AppRoutes() {
-  const { user, loading } = useAuth()
-  
-  if (loading) {
-    return <LoadingSpinner />
-  }
-  
-  return (
-    <Routes>
-      <Route 
-        path="/login" 
-        element={user ? <Navigate to="/dashboard\" replace /> : <LoginPage />} 
-      />
-      <Route 
-        path="/dashboard" 
-        element={
-          <ProtectedRoute>
-            <MainMenu />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/people" 
-        element={
-          <ProtectedRoute>
-            <PeopleManagement />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/vision" 
-        element={
-          <ProtectedRoute>
-            <VisionAnalysis />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/settings" 
-        element={
-          <ProtectedRoute>
-            <Settings />
-          </ProtectedRoute>
-        } 
-      />
-      <Route path="/" element={<Navigate to="/dashboard\" replace />} />
-    </Routes>
-  )
-}
+// Validate environment on app initialization
+validateEnvironment();
 
-function App() {
-  return (
-    <Router>
-      <AuthProvider>
-        <div className="min-h-screen bg-gray-50">
-          <AppRoutes />
-        </div>
-      </AuthProvider>
-    </Router>
-  )
-}
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Index />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/menu" element={<MainMenu />} />
+          <Route path="/camera" element={<CameraPage />} />
+          <Route path="/persons" element={<PersonManagement />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </BrowserRouter>
+    </TooltipProvider>
+  </QueryClientProvider>
+);
 
-export default App
+export default App;
