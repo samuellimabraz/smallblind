@@ -1,6 +1,6 @@
 import PrismaService from '../database/prisma-service';
 import { User } from '../generated/prisma';
-
+import { randomUUID } from 'crypto';
 export class UserRepository {
     private prisma;
 
@@ -44,7 +44,10 @@ export class UserRepository {
         passwordHash: string;
     }): Promise<User> {
         return this.prisma.user.create({
-            data: userData
+            data: {
+                ...userData,
+                id: randomUUID(),
+            }
         });
     }
 

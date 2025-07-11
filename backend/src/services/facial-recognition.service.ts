@@ -160,7 +160,7 @@ export class FacialRecognitionService {
             console.log('Registration response:', JSON.stringify(data, null, 2));
 
             return {
-                id: data.person_id || data.id || `person_${Date.now()}`,
+                id: `person_${name}`, // Use consistent name-based ID format
                 name: data.name || name,
                 images: data.images || images,
                 createdAt: new Date(),
@@ -280,10 +280,51 @@ export class FacialRecognitionService {
     }
 
     async getPersons(): Promise<PersonData[]> {
-        // Note: The external API doesn't provide a way to list registered persons
-        // This would typically require a local database to track registered persons
-        console.warn('getPersons: External API does not support listing persons');
-        return [];
+        if (!this.config.apiKey) {
+            throw new Error('API key not configured. Please set FACE_RECOGNITION_API_KEY environment variable.');
+        }
+
+        try {
+            console.log('Getting persons from organization:', this.config.organization);
+            console.log('Using user:', this.config.user);
+            console.log('Using API key name:', this.config.apiKeyName);
+
+            const response = await this.client.get(`/people/${this.config.organization}`, {
+                params: {
+                    user: this.config.user,
+                    api_key_name: this.config.apiKeyName,
+                },
+                headers: {
+                    'Authorization': `Bearer ${this.config.apiKey}`,
+                },
+            });
+
+            const data = response.data as any;
+            console.log('Get persons response:', JSON.stringify(data, null, 2));
+
+            // The API returns { "people": ["name1", "name2", ...] }
+            const personNames = data.people || [];
+
+            // Convert to PersonData format
+            const persons: PersonData[] = personNames.map((name: string) => ({
+                id: `person_${name}`,
+                name: name,
+                images: [], // The API doesn't return images
+                createdAt: new Date(), // We don't have creation date
+                updatedAt: new Date(),
+            }));
+
+            console.log('Processed persons:', JSON.stringify(persons, null, 2));
+            return persons;
+
+        } catch (error: any) {
+            console.error('Failed to get persons:', error);
+            if (error.response) {
+                console.error('Response status:', error.response.status);
+                console.error('Response data:', error.response.data);
+            }
+            throw new Error(`Failed to get persons: ${error.response?.data?.error || error.message}`);
+        }
     }
 
     async updatePerson(id: string, name: string, images?: string[]): Promise<PersonData> {
@@ -293,9 +334,51 @@ export class FacialRecognitionService {
     }
 
     async deletePerson(id: string): Promise<void> {
-        // Note: The external API doesn't support deleting persons
-        // This would require a local database to track and manage persons
-        throw new Error('Delete person not supported by external API. Persons cannot be removed once registered.');
+        if (!this.config.apiKey) {
+            throw new Error('API key not configured. Please set FACE_RECOGNITION_API_KEY environment variable.');
+        }
+
+        try {
+            // Extract person name from ID (format: "person_name")
+            const personName = id.startsWith('person_') ? id.substring(7) : id;
+
+            console.log('Deleting person:', personName, 'from organization:', this.config.organization);
+            console.log('Using user:', this.config.user);
+            console.log('Using API key name:', this.config.apiKeyName);
+
+            const response = await this.client.request({
+                method: 'DELETE',
+                url: `/people/${this.config.organization}`,
+                headers: {
+                    'Authorization': `Bearer ${this.config.apiKey}`,
+                    'Content-Type': 'application/json',
+                },
+                data: {
+                    name: personName,
+                    api_auth: {
+                        user: this.config.user,
+                        api_key_name: this.config.apiKeyName,
+                    },
+                },
+            });
+
+            const data = response.data as any;
+            console.log('Delete person response:', JSON.stringify(data, null, 2));
+
+            if (data.message && data.message.includes('deleted successfully')) {
+                console.log(`Person ${personName} deleted successfully`);
+            } else {
+                console.warn('Unexpected delete response:', data);
+            }
+
+        } catch (error: any) {
+            console.error('Failed to delete person:', error);
+            if (error.response) {
+                console.error('Response status:', error.response.status);
+                console.error('Response data:', error.response.data);
+            }
+            throw new Error(`Failed to delete person: ${error.response?.data?.error || error.message}`);
+        }
     }
 
     setApiKey(apiKey: string): void {

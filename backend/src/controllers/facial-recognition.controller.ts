@@ -116,7 +116,7 @@ export class FacialRecognitionController {
 
                     await this.visionStorageService.saveFaceRecognition(
                         req.user.id,
-                        req.session?.id || null,
+                        null, // No session tracking for facial recognition
                         req.file.buffer,
                         req.file.originalname,
                         req.file.mimetype,

@@ -16,7 +16,7 @@ export class UserProfileService {
             return await this.prisma.prisma.user.findUnique({
                 where: { id: userId },
                 include: {
-                    settings: true,
+                    AppSettings: true,
                 },
             });
         } catch (error) {

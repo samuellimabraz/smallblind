@@ -13,12 +13,12 @@ export interface VisionHistoryItem {
     fileName?: string;
     imagePath?: string;
     analysisType: 'OBJECT_DETECTION' | 'IMAGE_DESCRIPTION' | 'FACE_RECOGNITION';
-    objectDetection?: {
+    ObjectDetection?: {
         id: string;
         modelName: string;
         modelSettings?: any;
         processingTimeMs?: number;
-        detectedObjects: Array<{
+        DetectedObject: Array<{
             id: string;
             label: string;
             confidence: number;
@@ -26,7 +26,7 @@ export interface VisionHistoryItem {
             attributes?: any;
         }>;
     };
-    imageDescription?: {
+    ImageDescription?: {
         id: string;
         modelName: string;
         prompt: string;
@@ -35,11 +35,11 @@ export interface VisionHistoryItem {
         description: string;
         processingTimeMs?: number;
     };
-    faceRecognition?: {
+    FaceRecognition?: {
         id: string;
         threshold: number;
         processingTimeMs?: number;
-        recognizedFaces: Array<{
+        RecognizedFace: Array<{
             id: string;
             personId?: string;
             personName?: string;
@@ -48,7 +48,7 @@ export interface VisionHistoryItem {
             attributes?: any;
         }>;
     };
-    session?: {
+    Session?: {
         id: string;
         startTime: string;
         endTime?: string;

@@ -1,6 +1,6 @@
 import PrismaService from '../database/prisma-service';
 import { User } from '../generated/prisma';
-
+import { randomUUID } from 'crypto';
 export class UserRepository {
     private prisma: PrismaService;
 
@@ -44,7 +44,10 @@ export class UserRepository {
      */
     async create(userData: Omit<User, 'id'>): Promise<User> {
         return this.prisma.prisma.user.create({
-            data: userData,
+            data: {
+                ...userData,
+                id: randomUUID(),
+            }
         });
     }
 

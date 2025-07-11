@@ -327,7 +327,7 @@ const CameraPage = () => {
           <div className="flex items-center space-x-4">
             <Button
               variant="ghost"
-              onClick={() => navigate("/")}
+              onClick={() => navigate("/menu")}
               className="flex items-center"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />

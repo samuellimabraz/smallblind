@@ -1,5 +1,5 @@
 import PrismaService from '../database/prisma-service';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { Prisma } from '../generated/prisma';
 
 /**
@@ -66,6 +66,7 @@ export class VisionStorageService {
                 // 1. Create the parent VisionAnalysis record
                 const visionAnalysis = await tx.visionAnalysis.create({
                     data: {
+                        id: randomUUID(),
                         userId,
                         sessionId,
                         analysisType: 'OBJECT_DETECTION',
@@ -80,6 +81,7 @@ export class VisionStorageService {
                 // 2. Create the ObjectDetection record
                 const objectDetection = await tx.objectDetection.create({
                     data: {
+                        id: randomUUID(),
                         visionAnalysisId: visionAnalysis.id,
                         userId, // Duplicated for direct query capability
                         modelName,
@@ -94,6 +96,7 @@ export class VisionStorageService {
                     const detectionPromises = detections.map((detection) =>
                         tx.detectedObject.create({
                             data: {
+                                id: randomUUID(),
                                 objectDetectionId: objectDetection.id,
                                 label: detection.label,
                                 confidence: detection.confidence,
@@ -110,8 +113,8 @@ export class VisionStorageService {
                 return await tx.objectDetection.findUnique({
                     where: { id: objectDetection.id },
                     include: {
-                        visionAnalysis: true,
-                        detectedObjects: true,
+                        VisionAnalysis: true,
+                        DetectedObject: true,
                     },
                 });
             });
@@ -157,6 +160,7 @@ export class VisionStorageService {
                 // 1. Create the parent VisionAnalysis record
                 const visionAnalysis = await tx.visionAnalysis.create({
                     data: {
+                        id: randomUUID(),
                         userId,
                         sessionId,
                         analysisType: 'FACE_RECOGNITION',
@@ -171,6 +175,7 @@ export class VisionStorageService {
                 // 2. Create the FaceRecognition record
                 const faceRecognition = await tx.faceRecognition.create({
                     data: {
+                        id: randomUUID(),
                         visionAnalysisId: visionAnalysis.id,
                         userId, // Duplicated for direct query capability
                         threshold,
@@ -184,12 +189,13 @@ export class VisionStorageService {
                     const recognitionPromises = recognizedFaces.map((face) =>
                         tx.recognizedFace.create({
                             data: {
+                                id: randomUUID(),
                                 faceRecognitionId: faceRecognition.id,
                                 personId: face.personId || null,
                                 personName: face.personName || null,
                                 confidence: face.confidence,
-                                boundingBox: face.boundingBox ? face.boundingBox as unknown as Prisma.InputJsonValue : null,
-                                attributes: face.attributes ? face.attributes as unknown as Prisma.InputJsonValue : null,
+                                boundingBox: face.boundingBox ? face.boundingBox as unknown as Prisma.InputJsonValue : undefined,
+                                attributes: face.attributes ? face.attributes as unknown as Prisma.InputJsonValue : undefined,
                             },
                         })
                     );
@@ -201,8 +207,8 @@ export class VisionStorageService {
                 return await tx.faceRecognition.findUnique({
                     where: { id: faceRecognition.id },
                     include: {
-                        visionAnalysis: true,
-                        recognizedFaces: true,
+                        VisionAnalysis: true,
+                        RecognizedFace: true,
                     },
                 });
             });
@@ -240,6 +246,7 @@ export class VisionStorageService {
                 // 1. Create the parent VisionAnalysis record
                 const visionAnalysis = await tx.visionAnalysis.create({
                     data: {
+                        id: randomUUID(),
                         userId,
                         sessionId,
                         analysisType: 'IMAGE_DESCRIPTION',
@@ -254,6 +261,7 @@ export class VisionStorageService {
                 // 2. Create the ImageDescription record
                 const imageDescription = await tx.imageDescription.create({
                     data: {
+                        id: randomUUID(),
                         visionAnalysisId: visionAnalysis.id,
                         userId, // Duplicated for direct query capability
                         modelName,
@@ -269,7 +277,7 @@ export class VisionStorageService {
                 return await tx.imageDescription.findUnique({
                     where: { id: imageDescription.id },
                     include: {
-                        visionAnalysis: true,
+                        VisionAnalysis: true,
                     },
                 });
             });
@@ -299,18 +307,18 @@ export class VisionStorageService {
                 skip: offset,
                 take: limit,
                 include: {
-                    objectDetection: {
+                    ObjectDetection: {
                         include: {
-                            detectedObjects: true,
+                            DetectedObject: true,
                         },
                     },
-                    imageDescription: true,
-                    faceRecognition: {
+                    ImageDescription: true,
+                    FaceRecognition: {
                         include: {
-                            recognizedFaces: true,
+                            RecognizedFace: true,
                         },
                     },
-                    session: {
+                    Session: {
                         select: {
                             id: true,
                             startTime: true,
@@ -347,15 +355,15 @@ export class VisionStorageService {
                 where: { sessionId },
                 orderBy: { createdAt: 'desc' },
                 include: {
-                    objectDetection: {
+                    ObjectDetection: {
                         include: {
-                            detectedObjects: true,
+                            DetectedObject: true,
                         },
                     },
-                    imageDescription: true,
-                    faceRecognition: {
+                    ImageDescription: true,
+                    FaceRecognition: {
                         include: {
-                            recognizedFaces: true,
+                            RecognizedFace: true,
                         },
                     },
                 },
@@ -377,25 +385,25 @@ export class VisionStorageService {
             return await prisma.visionAnalysis.findUnique({
                 where: { id },
                 include: {
-                    objectDetection: {
+                    ObjectDetection: {
                         include: {
-                            detectedObjects: true,
+                            DetectedObject: true,
                         },
                     },
-                    imageDescription: true,
-                    faceRecognition: {
+                    ImageDescription: true,
+                    FaceRecognition: {
                         include: {
-                            recognizedFaces: true,
+                            RecognizedFace: true,
                         },
                     },
-                    session: {
+                    Session: {
                         select: {
                             id: true,
                             startTime: true,
                             endTime: true,
                         },
                     },
-                    user: {
+                    User: {
                         select: {
                             id: true,
                             username: true,

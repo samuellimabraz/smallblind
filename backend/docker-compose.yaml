@@ -52,10 +52,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      llama-server:
-        condition: service_healthy
     volumes:
-      - ./client-demo:/usr/src/app/client-demo
       - ./uploads:/usr/src/app/uploads
     command: >
       sh -c "npx prisma migrate deploy && npm start"

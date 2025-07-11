@@ -106,7 +106,7 @@ const MainMenu = () => {
           showHelp();
           break;
         case "escape":
-          navigate("/");
+          navigate("/menu");
           break;
         default:
           break;

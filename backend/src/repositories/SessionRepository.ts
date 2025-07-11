@@ -1,6 +1,6 @@
 import PrismaService from '../database/prisma-service';
 import { Session, Prisma } from '../generated/prisma';
-
+import { randomUUID } from 'crypto';
 export class SessionRepository {
     private prisma: PrismaService;
 
@@ -43,6 +43,7 @@ export class SessionRepository {
     }): Promise<Session> {
         return this.prisma.prisma.session.create({
             data: {
+                id: randomUUID(),
                 userId: sessionData.userId,
                 startTime: sessionData.startTime,
                 endTime: sessionData.endTime || null,

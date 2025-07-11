@@ -203,16 +203,16 @@ export const FacialRecognition: React.FC<FacialRecognitionProps> = ({
             <p className="text-sm text-gray-600 mb-4">
               Add a new person to the recognition system with their photos.
             </p>
-            <p className="text-xs text-amber-600 mb-4">
-              Go to Person Management page to register new people.
+            <p className="text-xs text-blue-600 mb-4">
+              Go to Person Management page to register new people with webcam capture.
             </p>
-            <Button 
-              className="w-full" 
-              disabled={true}
+            <Button
+              className="w-full"
+              onClick={() => window.location.href = '/person-management'}
               variant="outline"
             >
               <Upload className="h-4 w-4 mr-2" />
-              Use Person Management
+              Go to Person Management
             </Button>
           </CardContent>
         </Card>
@@ -228,16 +228,16 @@ export const FacialRecognition: React.FC<FacialRecognitionProps> = ({
             <p className="text-sm text-gray-600 mb-4">
               Use the Camera page to identify registered people in images.
             </p>
-            <p className="text-xs text-amber-600 mb-4">
+            <p className="text-xs text-blue-600 mb-4">
               Enable face recognition in camera analysis settings.
             </p>
-            <Button 
-              variant="outline" 
-              className="w-full" 
-              disabled={true}
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => window.location.href = '/camera'}
             >
               <Upload className="h-4 w-4 mr-2" />
-              Use Camera Analysis
+              Go to Camera Analysis
             </Button>
           </CardContent>
         </Card>

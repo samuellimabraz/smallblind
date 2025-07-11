@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
     ArrowLeft,
@@ -45,7 +45,7 @@ const VisionHistory = () => {
     const navigate = useNavigate();
 
     // State management
-    const [historyData, setHistoryData] = useState<VisionHistoryResponse | null>(null);
+    const [allHistoryData, setAllHistoryData] = useState<VisionHistoryItem[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
@@ -55,29 +55,43 @@ const VisionHistory = () => {
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(10);
+    const [totalCount, setTotalCount] = useState(0);
 
-    // Load history data
-    const loadHistory = async (page = 1) => {
+    // Load all history data
+    const loadAllHistory = async () => {
         try {
             setIsLoading(true);
             setError(null);
 
-            console.log("VisionHistory: Loading history for page", page);
+            console.log("VisionHistory: Loading all history data");
 
-            const offset = (page - 1) * itemsPerPage;
-            const response = await visionHistoryService.getUserVisionHistory({
-                limit: itemsPerPage,
-                offset,
-            });
+            // Load all data by making multiple requests if needed
+            let allData: VisionHistoryItem[] = [];
+            let hasMore = true;
+            let offset = 0;
+            const limit = 100; // Load in chunks of 100
 
-            console.log("VisionHistory: Received response:", response);
-            console.log("VisionHistory: Response data length:", response?.data?.length);
-            console.log("VisionHistory: Response pagination:", response?.pagination);
+            while (hasMore) {
+                const response = await visionHistoryService.getUserVisionHistory({
+                    limit,
+                    offset,
+                });
 
-            setHistoryData(response);
-            setCurrentPage(page);
+                if (response.data && response.data.length > 0) {
+                    allData = [...allData, ...response.data];
+                    hasMore = response.pagination.hasMore;
+                    offset += limit;
+                } else {
+                    hasMore = false;
+                }
+            }
 
-            console.log("VisionHistory: State updated successfully");
+            console.log("VisionHistory: Loaded total items:", allData.length);
+
+            setAllHistoryData(allData);
+            setTotalCount(allData.length);
+            setCurrentPage(1); // Reset to first page when loading new data
+
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : "Failed to load vision history";
             console.error("VisionHistory: Error loading history:", err);
@@ -87,28 +101,49 @@ const VisionHistory = () => {
         }
     };
 
-    // Filter history items
-    const filteredItems = historyData?.data?.filter((item) => {
-        const matchesSearch = searchTerm === "" ||
-            item.fileName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.objectDetection?.detectedObjects.some(obj =>
-                obj.label.toLowerCase().includes(searchTerm.toLowerCase())
-            ) ||
-            item.imageDescription?.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.faceRecognition?.recognizedFaces.some(face =>
-                face.personName?.toLowerCase().includes(searchTerm.toLowerCase())
-            );
+    // Filter and paginate data
+    const { filteredItems, paginatedItems, totalPages, filteredCount } = useMemo(() => {
+        // First, filter the data
+        const filtered = allHistoryData.filter((item) => {
+            const matchesSearch = searchTerm === "" ||
+                item.fileName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                item.ObjectDetection?.DetectedObject.some(obj =>
+                    obj.label.toLowerCase().includes(searchTerm.toLowerCase())
+                ) ||
+                item.ImageDescription?.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                item.FaceRecognition?.RecognizedFace.some(face =>
+                    face.personName?.toLowerCase().includes(searchTerm.toLowerCase())
+                );
 
-        const matchesType = analysisTypeFilter === "all" ||
-            item.analysisType === analysisTypeFilter;
+            const matchesType = analysisTypeFilter === "all" ||
+                item.analysisType === analysisTypeFilter;
 
-        return matchesSearch && matchesType;
-    }) || [];
+            return matchesSearch && matchesType;
+        });
 
-    console.log("VisionHistory: Filtered items count:", filteredItems.length);
-    console.log("VisionHistory: History data exists:", !!historyData);
-    console.log("VisionHistory: Is loading:", isLoading);
-    console.log("VisionHistory: Error:", error);
+        // Then, paginate the filtered results
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        const paginated = filtered.slice(startIndex, endIndex);
+
+        const pages = Math.ceil(filtered.length / itemsPerPage);
+
+        console.log("VisionHistory: Filtered items count:", filtered.length);
+        console.log("VisionHistory: Paginated items count:", paginated.length);
+        console.log("VisionHistory: Total pages:", pages);
+
+        return {
+            filteredItems: filtered,
+            paginatedItems: paginated,
+            totalPages: pages,
+            filteredCount: filtered.length
+        };
+    }, [allHistoryData, searchTerm, analysisTypeFilter, currentPage, itemsPerPage]);
+
+    // Reset pagination when filters change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, analysisTypeFilter]);
 
     // Toggle expanded item
     const toggleExpanded = (itemId: string) => {
@@ -163,13 +198,37 @@ const VisionHistory = () => {
         }
     };
 
-    // Calculate total pages
-    const totalPages = historyData ? Math.ceil(historyData.pagination.total / itemsPerPage) : 0;
+    // Calculate summary statistics from filtered data
+    const summaryStats = useMemo(() => {
+        const objectDetectionCount = filteredItems.filter(item => item.analysisType === "OBJECT_DETECTION").length;
+        const imageDescriptionCount = filteredItems.filter(item => item.analysisType === "IMAGE_DESCRIPTION").length;
+        const faceRecognitionCount = filteredItems.filter(item => item.analysisType === "FACE_RECOGNITION").length;
+
+        return {
+            total: filteredCount,
+            objectDetection: objectDetectionCount,
+            imageDescription: imageDescriptionCount,
+            faceRecognition: faceRecognitionCount
+        };
+    }, [filteredItems, filteredCount]);
 
     // Load initial data
     useEffect(() => {
-        loadHistory();
+        loadAllHistory();
     }, []);
+
+    // Pagination handlers
+    const handlePreviousPage = () => {
+        if (currentPage > 1) {
+            setCurrentPage(currentPage - 1);
+        }
+    };
+
+    const handleNextPage = () => {
+        if (currentPage < totalPages) {
+            setCurrentPage(currentPage + 1);
+        }
+    };
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
@@ -199,7 +258,7 @@ const VisionHistory = () => {
                     </div>
                     <Button
                         variant="outline"
-                        onClick={() => loadHistory(currentPage)}
+                        onClick={loadAllHistory}
                         disabled={isLoading}
                         className="flex items-center space-x-2"
                     >
@@ -273,7 +332,7 @@ const VisionHistory = () => {
                 )}
 
                 {/* Empty State */}
-                {!isLoading && filteredItems.length === 0 && (
+                {!isLoading && paginatedItems.length === 0 && (
                     <Card>
                         <CardContent className="flex items-center justify-center py-12">
                             <div className="text-center text-gray-500">
@@ -291,9 +350,9 @@ const VisionHistory = () => {
                 )}
 
                 {/* History Items */}
-                {!isLoading && filteredItems.length > 0 && (
+                {!isLoading && paginatedItems.length > 0 && (
                     <div className="space-y-4">
-                        {filteredItems.map((item) => {
+                        {paginatedItems.map((item) => {
                             const typeInfo = getAnalysisTypeInfo(item.analysisType);
                             const TypeIcon = typeInfo.icon;
                             const isExpanded = expandedItems.has(item.id);
@@ -323,10 +382,10 @@ const VisionHistory = () => {
                                                             <Calendar className="h-3 w-3 mr-1" />
                                                             {formatDate(item.createdAt)}
                                                         </div>
-                                                        {item.session && (
+                                                        {item.Session && (
                                                             <div className="flex items-center">
                                                                 <User className="h-3 w-3 mr-1" />
-                                                                Session {item.session.id.slice(0, 8)}
+                                                                Session {item.Session.id.slice(0, 8)}
                                                             </div>
                                                         )}
                                                     </div>
@@ -353,26 +412,26 @@ const VisionHistory = () => {
                                     <CardContent>
                                         {/* Quick Summary */}
                                         <div className="mb-4">
-                                            {item.analysisType === "OBJECT_DETECTION" && item.objectDetection && (
+                                            {item.analysisType === "OBJECT_DETECTION" && item.ObjectDetection && (
                                                 <div className="flex items-center space-x-4 text-sm text-gray-600">
                                                     <div className="flex items-center">
                                                         <Search className="h-4 w-4 mr-1 text-blue-600" />
-                                                        {item.objectDetection.detectedObjects.length} objects detected
+                                                        {item.ObjectDetection.DetectedObject.length} objects detected
                                                     </div>
                                                     <div className="flex items-center">
                                                         <Cpu className="h-4 w-4 mr-1 text-gray-500" />
-                                                        {item.objectDetection.modelName}
+                                                        {item.ObjectDetection.modelName}
                                                     </div>
-                                                    {item.objectDetection.processingTimeMs && (
+                                                    {item.ObjectDetection.processingTimeMs && (
                                                         <div className="flex items-center">
                                                             <Clock className="h-4 w-4 mr-1 text-gray-500" />
-                                                            {item.objectDetection.processingTimeMs}ms
+                                                            {item.ObjectDetection.processingTimeMs}ms
                                                         </div>
                                                     )}
                                                 </div>
                                             )}
 
-                                            {item.analysisType === "IMAGE_DESCRIPTION" && item.imageDescription && (
+                                            {item.analysisType === "IMAGE_DESCRIPTION" && item.ImageDescription && (
                                                 <div className="flex items-center space-x-4 text-sm text-gray-600">
                                                     <div className="flex items-center">
                                                         <FileText className="h-4 w-4 mr-1 text-green-600" />
@@ -380,31 +439,27 @@ const VisionHistory = () => {
                                                     </div>
                                                     <div className="flex items-center">
                                                         <Cpu className="h-4 w-4 mr-1 text-gray-500" />
-                                                        {item.imageDescription.modelName}
+                                                        {item.ImageDescription.modelName}
                                                     </div>
-                                                    {item.imageDescription.processingTimeMs && (
+                                                    {item.ImageDescription.processingTimeMs && (
                                                         <div className="flex items-center">
                                                             <Clock className="h-4 w-4 mr-1 text-gray-500" />
-                                                            {item.imageDescription.processingTimeMs}ms
+                                                            {item.ImageDescription.processingTimeMs}ms
                                                         </div>
                                                     )}
                                                 </div>
                                             )}
 
-                                            {item.analysisType === "FACE_RECOGNITION" && item.faceRecognition && (
+                                            {item.analysisType === "FACE_RECOGNITION" && item.FaceRecognition && (
                                                 <div className="flex items-center space-x-4 text-sm text-gray-600">
                                                     <div className="flex items-center">
                                                         <User className="h-4 w-4 mr-1 text-purple-600" />
-                                                        {item.faceRecognition.recognizedFaces.length} faces recognized
+                                                        {item.FaceRecognition.RecognizedFace.length} faces recognized
                                                     </div>
-                                                    <div className="flex items-center">
-                                                        <Cpu className="h-4 w-4 mr-1 text-gray-500" />
-                                                        {item.faceRecognition.modelName}
-                                                    </div>
-                                                    {item.faceRecognition.processingTimeMs && (
+                                                    {item.FaceRecognition.processingTimeMs && (
                                                         <div className="flex items-center">
                                                             <Clock className="h-4 w-4 mr-1 text-gray-500" />
-                                                            {item.faceRecognition.processingTimeMs}ms
+                                                            {item.FaceRecognition.processingTimeMs}ms
                                                         </div>
                                                     )}
                                                 </div>
@@ -417,15 +472,15 @@ const VisionHistory = () => {
                                                 <Separator className="mb-4" />
 
                                                 {/* Object Detection Details */}
-                                                {item.analysisType === "OBJECT_DETECTION" && item.objectDetection && (
+                                                {item.analysisType === "OBJECT_DETECTION" && item.ObjectDetection && (
                                                     <div className="space-y-4">
                                                         <div>
                                                             <h4 className="font-medium text-gray-900 mb-2 flex items-center">
                                                                 <Search className="h-4 w-4 mr-1 text-blue-600" />
-                                                                Detected Objects ({item.objectDetection.detectedObjects.length})
+                                                                Detected Objects ({item.ObjectDetection.DetectedObject.length})
                                                             </h4>
                                                             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                                                                {item.objectDetection.detectedObjects.map((obj, index) => (
+                                                                {item.ObjectDetection.DetectedObject.map((obj, index) => (
                                                                     <Badge
                                                                         key={index}
                                                                         variant="outline"
@@ -441,7 +496,7 @@ const VisionHistory = () => {
                                                         </div>
 
                                                         {/* Model Settings */}
-                                                        {item.objectDetection.modelSettings && (
+                                                        {item.ObjectDetection.modelSettings && (
                                                             <div>
                                                                 <h4 className="font-medium text-gray-900 mb-2 flex items-center">
                                                                     <Cpu className="h-4 w-4 mr-1 text-gray-600" />
@@ -449,7 +504,7 @@ const VisionHistory = () => {
                                                                 </h4>
                                                                 <div className="bg-gray-50 p-3 rounded-lg">
                                                                     <pre className="text-xs text-gray-700 overflow-x-auto">
-                                                                        {JSON.stringify(item.objectDetection.modelSettings, null, 2)}
+                                                                        {JSON.stringify(item.ObjectDetection.modelSettings, null, 2)}
                                                                     </pre>
                                                                 </div>
                                                             </div>
@@ -458,7 +513,7 @@ const VisionHistory = () => {
                                                 )}
 
                                                 {/* Image Description Details */}
-                                                {item.analysisType === "IMAGE_DESCRIPTION" && item.imageDescription && (
+                                                {item.analysisType === "IMAGE_DESCRIPTION" && item.ImageDescription && (
                                                     <div className="space-y-4">
                                                         <div>
                                                             <h4 className="font-medium text-gray-900 mb-2 flex items-center">
@@ -467,7 +522,7 @@ const VisionHistory = () => {
                                                             </h4>
                                                             <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                                                                 <p className="text-green-900 leading-relaxed">
-                                                                    {item.imageDescription.description}
+                                                                    {item.ImageDescription.description}
                                                                 </p>
                                                             </div>
                                                         </div>
@@ -478,7 +533,7 @@ const VisionHistory = () => {
                                                             </h4>
                                                             <div className="bg-gray-50 p-3 rounded-lg">
                                                                 <p className="text-sm text-gray-700">
-                                                                    {item.imageDescription.prompt}
+                                                                    {item.ImageDescription.prompt}
                                                                 </p>
                                                             </div>
                                                         </div>
@@ -490,16 +545,16 @@ const VisionHistory = () => {
                                                                 Generation Settings
                                                             </h4>
                                                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-                                                                {item.imageDescription.maxNewTokens && (
+                                                                {item.ImageDescription.maxNewTokens && (
                                                                     <div>
                                                                         <span className="text-gray-500">Max Tokens:</span>
-                                                                        <span className="ml-2 font-medium">{item.imageDescription.maxNewTokens}</span>
+                                                                        <span className="ml-2 font-medium">{item.ImageDescription.maxNewTokens}</span>
                                                                     </div>
                                                                 )}
-                                                                {item.imageDescription.temperature && (
+                                                                {item.ImageDescription.temperature && (
                                                                     <div>
                                                                         <span className="text-gray-500">Temperature:</span>
-                                                                        <span className="ml-2 font-medium">{item.imageDescription.temperature}</span>
+                                                                        <span className="ml-2 font-medium">{item.ImageDescription.temperature}</span>
                                                                     </div>
                                                                 )}
                                                             </div>
@@ -508,17 +563,17 @@ const VisionHistory = () => {
                                                 )}
 
                                                 {/* Face Recognition Details */}
-                                                {item.analysisType === "FACE_RECOGNITION" && item.faceRecognition && (
+                                                {item.analysisType === "FACE_RECOGNITION" && item.FaceRecognition && (
                                                     <div className="space-y-4">
                                                         <div>
                                                             <h4 className="font-medium text-gray-900 mb-2 flex items-center">
                                                                 <User className="h-4 w-4 mr-1 text-purple-600" />
-                                                                Recognized Faces ({item.faceRecognition.recognizedFaces.length})
+                                                                Recognized Faces ({item.FaceRecognition.RecognizedFace.length})
                                                             </h4>
                                                             <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                                                                {item.faceRecognition.recognizedFaces.length > 0 ? (
+                                                                {item.FaceRecognition.RecognizedFace.length > 0 ? (
                                                                     <div className="space-y-2">
-                                                                        {item.faceRecognition.recognizedFaces.map((face, index) => (
+                                                                        {item.FaceRecognition.RecognizedFace.map((face, index) => (
                                                                             <div key={index} className="flex items-center justify-between bg-white p-2 rounded border">
                                                                                 <div className="flex items-center gap-2">
                                                                                     <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
@@ -546,17 +601,22 @@ const VisionHistory = () => {
                     </div>
                 )}
 
-                {/* Pagination */}
-                {historyData && totalPages > 1 && (
+                {/* Pagination - Only show if there are multiple pages of filtered results */}
+                {!isLoading && totalPages > 1 && (
                     <div className="mt-8 flex items-center justify-between">
                         <div className="text-sm text-gray-600">
-                            Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, historyData.pagination.total)} of {historyData.pagination.total} results
+                            Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredCount)} of {filteredCount} results
+                            {(searchTerm || analysisTypeFilter !== "all") && (
+                                <span className="text-gray-500 ml-2">
+                                    (filtered from {totalCount} total)
+                                </span>
+                            )}
                         </div>
                         <div className="flex items-center space-x-2">
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => loadHistory(currentPage - 1)}
+                                onClick={handlePreviousPage}
                                 disabled={currentPage === 1 || isLoading}
                             >
                                 Previous
@@ -567,7 +627,7 @@ const VisionHistory = () => {
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => loadHistory(currentPage + 1)}
+                                onClick={handleNextPage}
                                 disabled={currentPage === totalPages || isLoading}
                             >
                                 Next
@@ -576,32 +636,45 @@ const VisionHistory = () => {
                     </div>
                 )}
 
-                {/* Summary Stats */}
-                {historyData && (
+                {/* Summary Stats - Only show if there are results and multiple pages or filters applied */}
+                {!isLoading && filteredCount > 0 && (totalPages > 1 || searchTerm || analysisTypeFilter !== "all") && (
                     <div className="mt-8">
                         <Card>
                             <CardHeader>
-                                <CardTitle className="text-lg">Summary</CardTitle>
+                                <CardTitle className="text-lg">
+                                    Summary
+                                    {(searchTerm || analysisTypeFilter !== "all") && (
+                                        <span className="text-sm font-normal text-gray-500 ml-2">
+                                            (filtered results)
+                                        </span>
+                                    )}
+                                </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
                                     <div className="p-4 bg-blue-50 rounded-lg">
                                         <div className="text-2xl font-bold text-blue-600">
-                                            {historyData.pagination.total}
+                                            {summaryStats.total}
                                         </div>
                                         <div className="text-sm text-blue-800">Total Analyses</div>
                                     </div>
                                     <div className="p-4 bg-green-50 rounded-lg">
                                         <div className="text-2xl font-bold text-green-600">
-                                            {historyData.data.filter(item => item.analysisType === "OBJECT_DETECTION").length}
+                                            {summaryStats.objectDetection}
                                         </div>
                                         <div className="text-sm text-green-800">Object Detections</div>
                                     </div>
                                     <div className="p-4 bg-purple-50 rounded-lg">
                                         <div className="text-2xl font-bold text-purple-600">
-                                            {historyData.data.filter(item => item.analysisType === "IMAGE_DESCRIPTION").length}
+                                            {summaryStats.imageDescription}
                                         </div>
                                         <div className="text-sm text-purple-800">Image Descriptions</div>
+                                    </div>
+                                    <div className="p-4 bg-orange-50 rounded-lg">
+                                        <div className="text-2xl font-bold text-orange-600">
+                                            {summaryStats.faceRecognition}
+                                        </div>
+                                        <div className="text-sm text-orange-800">Face Recognition</div>
                                     </div>
                                 </div>
                             </CardContent>

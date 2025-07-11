@@ -13,6 +13,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 const Index = () => {
   const navigate = useNavigate();
 
+  // Redirect to main menu for consistency
+  useEffect(() => {
+    navigate("/menu", { replace: true });
+  }, [navigate]);
+
   const features = [
     {
       icon: Camera,

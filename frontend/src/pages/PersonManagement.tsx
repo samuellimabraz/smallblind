@@ -71,8 +71,7 @@ const PersonManagement = () => {
       setPersons(data);
       setFilteredPersons(data);
     } catch (err) {
-      const errorMessage =
-        "Unable to load registered people. The external API doesn't support listing registered persons.";
+      const errorMessage = err instanceof Error ? err.message : "Failed to load registered people";
       setError(errorMessage);
     } finally {
       setIsLoading(false);
@@ -260,17 +259,81 @@ const PersonManagement = () => {
 
   // Update existing person
   const handleUpdate = async () => {
-    setError("Update functionality is not available. The external facial recognition API doesn't support updating registered persons. Please register the person again with new photos if needed.");
+    if (!editingPerson) return;
+
+    if (!formData.name.trim()) {
+      const errorMessage = "Please enter a name.";
+      setError(errorMessage);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Convert captured photos to File objects if we have new photos
+      let photoFiles: File[] = [];
+      if (capturedPhotos.length > 0) {
+        photoFiles = capturedPhotos.map((photoDataUrl, index) =>
+          dataURLtoFile(photoDataUrl, `photo_${index + 1}.jpg`)
+        );
+      }
+
+      const updatedPerson = await facialRecognitionAPI.updatePerson(
+        editingPerson.id,
+        formData.name.trim(),
+        photoFiles.length > 0 ? photoFiles : undefined,
+      );
+
+      setPersons((prev) =>
+        prev.map((person) =>
+          person.id === editingPerson.id ? updatedPerson : person
+        )
+      );
+
+      const successMessage = `${formData.name} has been updated successfully${photoFiles.length > 0 ? ` with ${photoFiles.length} new photos` : ''}.`;
+      setSuccess(successMessage);
+
+      resetForm();
+      setIsDialogOpen(false);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to update person. Please try again.";
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Delete person
   const handleDelete = async (person: Person) => {
-    setError("Delete functionality is not available. The external facial recognition API doesn't support removing registered persons.");
+    if (!confirm(`Are you sure you want to delete ${person.name}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      await facialRecognitionAPI.deletePerson(person.id);
+
+      setPersons((prev) => prev.filter((p) => p.id !== person.id));
+      const successMessage = `${person.name} has been deleted successfully.`;
+      setSuccess(successMessage);
+
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to delete person. Please try again.";
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Open edit dialog
   const openEditDialog = (person: Person) => {
-    setError("Edit functionality is not available. The external facial recognition API doesn't support updating registered persons.");
+    setEditingPerson(person);
+    setFormData({ name: person.name });
+    setCapturedPhotos([]);
+    setIsDialogOpen(true);
   };
 
   // Open create dialog
@@ -356,7 +419,9 @@ const PersonManagement = () => {
               </DialogTrigger>
               <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>Register New Person</DialogTitle>
+                  <DialogTitle>
+                    {editingPerson ? 'Edit Person' : 'Register New Person'}
+                  </DialogTitle>
                 </DialogHeader>
 
                 <div className="space-y-6">
@@ -513,19 +578,36 @@ const PersonManagement = () => {
 
                   {/* Action Buttons */}
                   <div className="flex space-x-2">
-                    <Button
-                      onClick={handleCreate}
-                      disabled={
-                        isLoading ||
-                        !formData.name.trim() ||
-                        capturedPhotos.length === 0
-                      }
-                      className="flex-1"
-                    >
-                      {isLoading
-                        ? "Registering..."
-                        : `Register with ${capturedPhotos.length} photo${capturedPhotos.length !== 1 ? 's' : ''}`}
-                    </Button>
+                    {editingPerson ? (
+                      <Button
+                        onClick={handleUpdate}
+                        disabled={
+                          isLoading ||
+                          !formData.name.trim()
+                        }
+                        className="flex-1"
+                      >
+                        {isLoading
+                          ? "Updating..."
+                          : capturedPhotos.length > 0
+                            ? `Update with ${capturedPhotos.length} new photo${capturedPhotos.length !== 1 ? 's' : ''}`
+                            : "Update Name"}
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={handleCreate}
+                        disabled={
+                          isLoading ||
+                          !formData.name.trim() ||
+                          capturedPhotos.length === 0
+                        }
+                        className="flex-1"
+                      >
+                        {isLoading
+                          ? "Registering..."
+                          : `Register with ${capturedPhotos.length} photo${capturedPhotos.length !== 1 ? 's' : ''}`}
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       onClick={() => {
@@ -637,8 +719,6 @@ const PersonManagement = () => {
                             size="sm"
                             className="h-8 w-8 p-0"
                             aria-label={`Edit ${person.name}`}
-                            disabled={true}
-                            title="Edit not available - API limitation"
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
@@ -648,8 +728,6 @@ const PersonManagement = () => {
                             size="sm"
                             className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
                             aria-label={`Delete ${person.name}`}
-                            disabled={true}
-                            title="Delete not available - API limitation"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -663,16 +741,6 @@ const PersonManagement = () => {
           </CardContent>
         </Card>
 
-        {/* API Limitations Notice */}
-        <div className="mt-6">
-          <Alert className="border-amber-200 bg-amber-50">
-            <AlertCircle className="h-4 w-4 text-amber-600" />
-            <AlertDescription className="text-amber-800">
-              <strong>API Limitations:</strong> The external facial recognition service doesn't support listing, updating, or deleting registered persons. Once a person is registered, they cannot be removed or modified. Face recognition will work for all registered persons.
-            </AlertDescription>
-          </Alert>
-        </div>
-
         {/* Help Section */}
         <div className="mt-6 grid md:grid-cols-2 gap-4">
           <Card>
@@ -680,13 +748,14 @@ const PersonManagement = () => {
               <CardTitle className="text-lg">How It Works</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-gray-600 space-y-2">
-              <p>• Click "Add Person" to start webcam registration</p>
+              <p>• Click "Add Person" to register a new person with webcam</p>
               <p>• Enter the person's name and start the camera</p>
               <p>• Click "Start Capturing" to take photos automatically</p>
               <p>• Photos are taken every 1-5 seconds (adjustable)</p>
               <p>• Stop capturing when you have enough photos (2-10 recommended)</p>
               <p>• Click "Register" to save the person to the system</p>
-              <p>• <strong>Note:</strong> Registered persons cannot be removed or updated</p>
+              <p>• Use the edit button to modify person names or add new photos</p>
+              <p>• Use the delete button to remove people from the system</p>
             </CardContent>
           </Card>
 
@@ -700,7 +769,8 @@ const PersonManagement = () => {
               <p>• Have the person move slightly between captures</p>
               <p>• Avoid capturing when others are in frame</p>
               <p>• 3-5 photos usually provide good recognition accuracy</p>
-              <p>• <strong>Register carefully</strong> - changes cannot be made later</p>
+              <p>• <strong>Edit carefully</strong> - name changes are permanent</p>
+              <p>• <strong>Delete carefully</strong> - removed people cannot be recovered</p>
             </CardContent>
           </Card>
         </div>
