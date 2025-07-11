@@ -1,14 +1,17 @@
 import { Request, Response } from 'express';
 import { validationResult } from 'express-validator';
 import { FacialRecognitionService, PersonData } from '../services/facial-recognition.service';
+import { VisionStorageService } from '../services/vision-storage.service';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import multer from 'multer';
 
 export class FacialRecognitionController {
     private facialRecognitionService: FacialRecognitionService;
+    private visionStorageService: VisionStorageService;
 
     constructor() {
         this.facialRecognitionService = new FacialRecognitionService();
+        this.visionStorageService = VisionStorageService.getInstance();
     }
 
     async initializeOrganization(req: AuthRequest, res: Response): Promise<void> {
@@ -97,12 +100,43 @@ export class FacialRecognitionController {
             const threshold = req.body.threshold ? parseFloat(req.body.threshold) : 0.5;
             const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
 
+            const startTime = Date.now();
             const result = await this.facialRecognitionService.recognizeFace(base64Image, threshold);
+            const processingTime = Date.now() - startTime;
+
+            // Save face recognition results to database if user is authenticated
+            if (req.user && result.success) {
+                try {
+                    const recognizedFaces = result.results?.map(face => ({
+                        personId: face.personId,
+                        personName: face.personName,
+                        confidence: face.confidence,
+                        boundingBox: face.boundingBox,
+                    })) || [];
+
+                    await this.visionStorageService.saveFaceRecognition(
+                        req.user.id,
+                        req.session?.id || null,
+                        req.file.buffer,
+                        req.file.originalname,
+                        req.file.mimetype,
+                        threshold,
+                        recognizedFaces,
+                        processingTime
+                    );
+
+                    console.log('Face recognition results saved to database');
+                } catch (saveError) {
+                    console.error('Failed to save face recognition results:', saveError);
+                    // Don't fail the request if saving fails
+                }
+            }
 
             res.status(200).json({
                 success: result.success,
                 results: result.results,
                 error: result.error,
+                processingTime,
             });
         } catch (error: any) {
             console.error('Error recognizing face:', error);

@@ -123,6 +123,97 @@ export class VisionStorageService {
     }
 
     /**
+     * Save face recognition results to the database
+     */
+    public async saveFaceRecognition(
+        userId: string,
+        sessionId: string | null,
+        imageBuffer: Buffer,
+        fileName: string | null,
+        imageFormat: string | null,
+        threshold: number,
+        recognizedFaces: Array<{
+            personId?: string;
+            personName?: string;
+            confidence: number;
+            boundingBox?: {
+                x: number;
+                y: number;
+                width: number;
+                height: number;
+            };
+            attributes?: Record<string, any>;
+        }>,
+        processingTimeMs: number
+    ) {
+        const prisma = this.prismaService.prisma;
+
+        try {
+            // Generate hash for image deduplication
+            const imageHash = this.generateImageHash(imageBuffer);
+
+            // Create a transaction to ensure all database operations succeed or fail together
+            return await prisma.$transaction(async (tx) => {
+                // 1. Create the parent VisionAnalysis record
+                const visionAnalysis = await tx.visionAnalysis.create({
+                    data: {
+                        userId,
+                        sessionId,
+                        analysisType: 'FACE_RECOGNITION',
+                        imageHash,
+                        imageFormat,
+                        fileName,
+                        // We're not storing the actual image, just metadata
+                        // If you want to save the image, implement image storage logic and store the path here
+                    },
+                });
+
+                // 2. Create the FaceRecognition record
+                const faceRecognition = await tx.faceRecognition.create({
+                    data: {
+                        visionAnalysisId: visionAnalysis.id,
+                        userId, // Duplicated for direct query capability
+                        threshold,
+                        processingTimeMs,
+                    },
+                });
+
+                // 3. Create RecognizedFace records for each face
+                if (recognizedFaces && recognizedFaces.length > 0) {
+                    // Create each recognition individually
+                    const recognitionPromises = recognizedFaces.map((face) =>
+                        tx.recognizedFace.create({
+                            data: {
+                                faceRecognitionId: faceRecognition.id,
+                                personId: face.personId || null,
+                                personName: face.personName || null,
+                                confidence: face.confidence,
+                                boundingBox: face.boundingBox ? face.boundingBox as unknown as Prisma.InputJsonValue : null,
+                                attributes: face.attributes ? face.attributes as unknown as Prisma.InputJsonValue : null,
+                            },
+                        })
+                    );
+
+                    await Promise.all(recognitionPromises);
+                }
+
+                // Return the created face recognition with its related faces
+                return await tx.faceRecognition.findUnique({
+                    where: { id: faceRecognition.id },
+                    include: {
+                        visionAnalysis: true,
+                        recognizedFaces: true,
+                    },
+                });
+            });
+        } catch (error) {
+            console.error('Error saving face recognition results:', error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            throw new Error(`Failed to save face recognition results: ${errorMessage}`);
+        }
+    }
+
+    /**
      * Save image description results to the database
      */
     public async saveImageDescription(
@@ -214,6 +305,11 @@ export class VisionStorageService {
                         },
                     },
                     imageDescription: true,
+                    faceRecognition: {
+                        include: {
+                            recognizedFaces: true,
+                        },
+                    },
                     session: {
                         select: {
                             id: true,
@@ -257,6 +353,11 @@ export class VisionStorageService {
                         },
                     },
                     imageDescription: true,
+                    faceRecognition: {
+                        include: {
+                            recognizedFaces: true,
+                        },
+                    },
                 },
             });
         } catch (error) {
@@ -282,6 +383,11 @@ export class VisionStorageService {
                         },
                     },
                     imageDescription: true,
+                    faceRecognition: {
+                        include: {
+                            recognizedFaces: true,
+                        },
+                    },
                     session: {
                         select: {
                             id: true,

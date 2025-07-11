@@ -1,20 +1,30 @@
-FROM node:18-alpine
+FROM node:22.13.1
+
+# Install build tools for native modules
+RUN apt-get update && apt-get install -y \
+    libc6 \
+    openssl \
+    ca-certificates \
+    build-essential \
+    python3 \
+    pkg-config \
+    libssl-dev
 
 # Create app directory
 WORKDIR /usr/src/app
 
-# Install app dependencies
-# A wildcard is used to ensure both package.json AND package-lock.json are copied
+# Copy only package files and prisma directory first
 COPY package*.json ./
-
-# Copy Prisma schema
 COPY prisma ./prisma/
+
+# Install dependencies (native modules will be built for the container)
+RUN npm install
+
+# Copy the rest of the application
+COPY . .
 
 # Generate Prisma client
 RUN npx prisma generate
-
-# Copy application source code
-COPY . .
 
 # Build TypeScript code
 RUN npm run build

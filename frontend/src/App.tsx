@@ -11,6 +11,7 @@ import Login from "./pages/Login";
 import MainMenu from "./pages/MainMenu";
 import PersonManagement from "./pages/PersonManagement";
 import CameraPage from "./pages/CameraPage";
+import VisionHistory from "./pages/VisionHistory";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -56,6 +57,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <PersonManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/history"
+              element={
+                <ProtectedRoute>
+                  <VisionHistory />
                 </ProtectedRoute>
               }
             />

@@ -8,6 +8,7 @@ import {
   Home,
   HelpCircle,
   User,
+  History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,6 +39,16 @@ const MainMenu = () => {
       keyCommand: "P",
       color: "green",
     },
+    {
+      icon: History,
+      title: "Vision History",
+      description: "View your analysis history",
+      longDescription:
+        "Browse through your past AI vision analysis results, including object detection and image description history with detailed information.",
+      route: "/history",
+      keyCommand: "H",
+      color: "purple",
+    },
   ];
 
   const quickActions = [
@@ -59,8 +70,8 @@ const MainMenu = () => {
     // Show help information or navigate to help page
     alert(
       "SmallBlind main menu. Available options: Camera Analysis to capture and analyze images, " +
-      "Person Management to register people for recognition. " +
-      "Use keyboard shortcuts: C for camera, P for people, H for help, Escape to go home."
+      "Person Management to register people for recognition, Vision History to view past analysis results. " +
+      "Use keyboard shortcuts: C for camera, P for people, H for history, F1 for help, Escape to go home."
     );
   }
 
@@ -88,6 +99,10 @@ const MainMenu = () => {
           navigate("/persons");
           break;
         case "h":
+          navigate("/history");
+          break;
+        case "f1":
+          event.preventDefault();
           showHelp();
           break;
         case "escape":
@@ -121,7 +136,7 @@ const MainMenu = () => {
         </div>
 
         {/* Main Menu Items */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2 max-w-4xl mx-auto mb-8">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto mb-8">
           {menuItems.map((item) => (
             <Card
               key={item.title}
@@ -133,7 +148,9 @@ const MainMenu = () => {
                   <div
                     className={`p-3 rounded-lg ${item.color === "blue"
                       ? "bg-blue-100 text-blue-600"
-                      : "bg-green-100 text-green-600"
+                      : item.color === "green"
+                        ? "bg-green-100 text-green-600"
+                        : "bg-purple-100 text-purple-600"
                       }`}
                   >
                     <item.icon className="h-6 w-6" />
@@ -175,7 +192,7 @@ const MainMenu = () => {
           <p className="mb-2">
             <strong>Keyboard Shortcuts:</strong>
           </p>
-          <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
             <div>
               <kbd className="px-2 py-1 bg-gray-100 rounded">C</kbd> Camera
               Analysis
@@ -185,7 +202,11 @@ const MainMenu = () => {
               Management
             </div>
             <div>
-              <kbd className="px-2 py-1 bg-gray-100 rounded">H</kbd> Help
+              <kbd className="px-2 py-1 bg-gray-100 rounded">H</kbd> Vision
+              History
+            </div>
+            <div>
+              <kbd className="px-2 py-1 bg-gray-100 rounded">F1</kbd> Help
             </div>
             <div>
               <kbd className="px-2 py-1 bg-gray-100 rounded">Esc</kbd> Home

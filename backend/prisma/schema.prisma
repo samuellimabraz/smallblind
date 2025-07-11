@@ -28,6 +28,7 @@ model User {
   visionAnalyses    VisionAnalysis[]
   objectDetections  ObjectDetection[]
   imageDescriptions ImageDescription[]
+  faceRecognitions  FaceRecognition[]
 }
 
 model AppSettings {
@@ -72,10 +73,11 @@ model VisionAnalysis {
   imagePath   String?
 
   // Type discriminator for polymorphic queries
-  analysisType String // "OBJECT_DETECTION" or "IMAGE_DESCRIPTION"
+  analysisType String // "OBJECT_DETECTION", "IMAGE_DESCRIPTION", or "FACE_RECOGNITION"
 
   objectDetection  ObjectDetection?
   imageDescription ImageDescription?
+  faceRecognition  FaceRecognition?
 }
 
 // Object detection results
@@ -102,6 +104,34 @@ model DetectedObject {
   label       String
   confidence  Float
   boundingBox Json // xMin, yMin, xMax, yMax
+
+  attributes Json?
+}
+
+// Face recognition results
+model FaceRecognition {
+  id               String         @id @default(uuid())
+  visionAnalysisId String         @unique
+  visionAnalysis   VisionAnalysis @relation(fields: [visionAnalysisId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  threshold        Float          @default(0.5)
+  processingTimeMs Int?
+
+  recognizedFaces RecognizedFace[]
+}
+
+// Individual faces recognized in an image
+model RecognizedFace {
+  id                String          @id @default(uuid())
+  faceRecognitionId String
+  faceRecognition   FaceRecognition @relation(fields: [faceRecognitionId], references: [id], onDelete: Cascade)
+
+  personId     String?
+  personName   String?
+  confidence   Float
+  boundingBox  Json? // x, y, width, height
 
   attributes Json?
 }

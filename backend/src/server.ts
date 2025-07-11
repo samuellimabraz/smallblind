@@ -9,7 +9,6 @@ import { authRouter } from './routes/authRoutes';
 import { userRouter } from './routes/userRoutes';
 import { sessionRouter } from './routes/sessionRoutes';
 import { visionRouter } from './routes/visionRoutes';
-import { llamaRouter } from './routes/llamaRoutes';
 import { facialRecognitionRouter } from './routes/facialRecognitionRoutes';
 import PrismaService from './database/prisma-service';
 import { ObjectDetectionService } from './services/object-detection.service';
@@ -82,7 +81,6 @@ app.use('/api/auth', authRouter);
 app.use('/api/users', userRouter);
 app.use('/api/sessions', sessionRouter);
 app.use('/api/vision', visionRouter);
-app.use('/api/llama', llamaRouter);
 app.use('/api/facial-recognition', facialRecognitionRouter);
 
 // Health check route
